@@ -164,7 +164,7 @@ def section_header(title: str, sub: str = ""):
                         font-size:1.1rem;font-weight:600;color:{PURE_GOLD};
                         letter-spacing:0.04em;line-height:1.2;">{title}</div>
             {sub_html}
-            <div style="height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.333),transparent);margin-top:0.4rem;"></div>
+            <div style="height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.4),rgba(212,175,55,0));margin-top:0.4rem;"></div>
         </div>''', unsafe_allow_html=True)
 
 def card(html: str, accent: str = PURE_GOLD):
@@ -489,7 +489,7 @@ with st.sidebar:
                 CHRISTIAN APOLOGETICS CODEX
             </div>
         </div>
-        <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,0.333),transparent);margin:0.3rem 0 1rem;"></div>
+        <div style="height:1px;background:linear-gradient(90deg,rgba(212,175,55,0),rgba(212,175,55,0.4),rgba(212,175,55,0));margin:0.3rem 0 1rem;"></div>
     """, unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-size:0.65rem;color:rgba(245,225,122,0.6);letter-spacing:0.15em;margin-bottom:0.4rem">📖 TRANSLATION</div>', unsafe_allow_html=True)
@@ -499,7 +499,7 @@ with st.sidebar:
                                                         "web": "World English (WEB)",
                                                         "bbe": "Basic English (BBE)"}[x])
 
-    st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
+    st.markdown('<hr/>', unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-size:0.65rem;color:rgba(245,225,122,0.6);letter-spacing:0.15em;margin-bottom:0.6rem">QUICK LOAD — CANONICAL PASSAGES</div>', unsafe_allow_html=True)
     QUICK_REFS = {
@@ -519,7 +519,7 @@ with st.sidebar:
             st.session_state.quick_load_ref = ref
             st.session_state.quick_load_translation = translation
 
-    st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
+    st.markdown('<hr/>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-size:0.58rem;color:rgba(245,225,122,0.267);text-align:center;line-height:1.8;">Sola Scriptura · Soli Deo Gloria<br>Solus Christus · Sola Gratia · Sola Fide</div>', unsafe_allow_html=True)
 
 
@@ -628,7 +628,7 @@ with tab1:
                 </div>''', unsafe_allow_html=True)
 
             # Parallel translations
-            st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
+            st.markdown('<hr/>', unsafe_allow_html=True)
             section_header("Parallel Translations")
             for alt_trans in ["kjv", "web", "bbe"]:
                 if alt_trans != trans_default:
@@ -664,7 +664,7 @@ with tab1:
             st.markdown(f'<div style="font-size:0.78rem;color:rgba(245,225,122,0.4);">Load a passage containing tracked theological terms to activate lexical analysis.</div>',
                         unsafe_allow_html=True)
 
-        st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
+        st.markdown('<hr/>', unsafe_allow_html=True)
 
         # Cross-references
         section_header("Cross-References // TSK")
@@ -711,7 +711,7 @@ with tab2:
         st.session_state.scripture_data = fetch_scripture(passage_select, translation)
         st.session_state.scripture_ref  = passage_select
 
-    st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:0.6rem 0 1.2rem;"></div>', unsafe_allow_html=True)
+    st.markdown('<hr/>', unsafe_allow_html=True)
 
     # ── Context ──
     section_header("Historical & Literary Context")
@@ -886,7 +886,7 @@ with tab3:
                 st.markdown(f'<div style="font-size:0.84rem;color:{CREAM};line-height:1.88;">{content}</div>',
                             unsafe_allow_html=True)
 
-        st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1.2rem 0;"></div>', unsafe_allow_html=True)
+        st.markdown('<hr/>', unsafe_allow_html=True)
 
         section_header("Recommended Bibliography")
         biblio = [
