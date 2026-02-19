@@ -2,7 +2,9 @@
 Sententia Bible Lab — Christian Apologetics Codex
 ==================================================
 Graduate-level Biblical research workstation.
-Sources: API.Bible (primary) | bible-api.com (fallback) | hardcoded KJV (offline fallback)
+Architecture: Command Center | Academic Split (1:2.5) | Technical Basement
+AI: Claude Haiku — cached on string inputs (correct pattern for st.cache_data)
+Sources: ESV API | bible-api.com | hardcoded KJV offline fallback
 """
 
 import streamlit as st
@@ -10,10 +12,12 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 import re
-import html as html_module
+import json
+import math
+import hashlib
 
 # ─────────────────────────────────────────────
-# PAGE CONFIG
+# PAGE CONFIG  (must be first Streamlit call)
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Sententia Bible Lab",
@@ -25,131 +29,528 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 # PALETTE
 # ─────────────────────────────────────────────
-NAVY          = "#0A1628"
-BIBLICAL_BLUE = "#0038A8"
-PURE_GOLD     = "#D4AF37"
-LIGHT_GOLD    = "#F5E17A"
-TYRIAN_PURPLE = "#66023C"
-SCARLET       = "#B22222"
-CREAM         = "#FFF8DC"
+NAVY      = "#0A1628"
+BIB_BLUE  = "#0038A8"
+GOLD      = "#D4AF37"
+LT_GOLD   = "#F5E17A"
+PURPLE    = "#66023C"
+SCARLET   = "#B22222"
+CREAM     = "#FFF8DC"
+PARCHMENT = "#fdfaf3"
+BROWN     = "#4a3728"
+INK       = "#2c2c2c"
 
 # ─────────────────────────────────────────────
-# FONTS + CSS
+# CSS
 # ─────────────────────────────────────────────
 st.markdown(
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,400&family=IBM+Plex+Mono:wght@300;400;600&display=swap" rel="stylesheet">',
-    unsafe_allow_html=True,
-)
+    '<link href="https://fonts.googleapis.com/css2?'
+    'family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&'
+    'family=IBM+Plex+Mono:wght@300;400;500;600&'
+    'family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&'
+    'family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">',
+    unsafe_allow_html=True)
+
 st.markdown(f"""
 <style>
-.stApp, [data-testid="stAppViewContainer"] {{ background-color: {NAVY} !important; }}
-.stApp > header {{ background-color: {NAVY} !important; }}
-[data-testid="block-container"] {{ background-color: {NAVY} !important; padding-top: 1.2rem !important; max-width: 1400px !important; }}
-[data-testid="stSidebar"] {{ background: linear-gradient(175deg, {NAVY} 0%, #0a1f50 100%) !important; border-right: 1px solid rgba(212,175,55,0.333) !important; }}
-[data-testid="stSidebar"] * {{ color: {PURE_GOLD} !important; }}
-body, .stMarkdown, p, span, div {{ font-family: 'IBM Plex Mono', 'Courier New', monospace; color: {CREAM}; }}
-.stTabs [data-baseweb="tab-list"] {{ background-color: {NAVY} !important; border-bottom: 1px solid rgba(212,175,55,0.2) !important; gap: 2px; }}
-.stTabs [data-baseweb="tab"] {{ background-color: transparent !important; color: rgba(245,225,122,0.6) !important; font-family: 'IBM Plex Mono', monospace !important; font-size: 0.73rem !important; letter-spacing: 0.1em !important; padding: 8px 18px !important; border-bottom: 2px solid transparent !important; transition: all 0.15s ease !important; }}
-.stTabs [data-baseweb="tab"]:hover {{ color: {PURE_GOLD} !important; border-bottom: 2px solid rgba(212,175,55,0.4) !important; }}
-.stTabs [aria-selected="true"] {{ color: {PURE_GOLD} !important; border-bottom: 2px solid {PURE_GOLD} !important; font-weight: 600 !important; }}
-.stTabs [data-baseweb="tab-panel"] {{ background-color: {NAVY} !important; padding-top: 1.2rem !important; }}
-.stTextInput input {{ background-color: rgba(0,56,168,0.533) !important; color: {CREAM} !important; border: 1px solid rgba(212,175,55,0.333) !important; border-radius: 3px !important; font-family: 'IBM Plex Mono', monospace !important; font-size: 0.88rem !important; }}
-.stTextInput input:focus {{ border-color: {PURE_GOLD} !important; box-shadow: 0 0 6px rgba(212,175,55,0.2) !important; }}
-.stSelectbox > div > div {{ background-color: rgba(0,56,168,0.533) !important; color: {CREAM} !important; border: 1px solid rgba(212,175,55,0.333) !important; font-family: 'IBM Plex Mono', monospace !important; }}
-.stButton > button {{ background-color: {TYRIAN_PURPLE} !important; color: {PURE_GOLD} !important; border: 1px solid rgba(212,175,55,0.4) !important; font-family: 'IBM Plex Mono', monospace !important; font-size: 0.72rem !important; letter-spacing: 0.12em !important; border-radius: 3px !important; transition: all 0.15s ease !important; }}
-.stButton > button:hover {{ background-color: {PURE_GOLD} !important; color: {NAVY} !important; }}
-[data-testid="metric-container"] {{ background-color: rgba(0,56,168,0.267) !important; border: 1px solid rgba(212,175,55,0.2) !important; border-radius: 4px !important; padding: 0.6rem 0.9rem !important; }}
-[data-testid="metric-container"] label {{ color: rgba(245,225,122,0.733) !important; font-size: 0.68rem !important; letter-spacing: 0.1em !important; }}
-[data-testid="stMetricValue"] {{ color: {PURE_GOLD} !important; font-size: 1.4rem !important; font-weight: 600 !important; }}
-[data-testid="stDataFrame"] {{ border: 1px solid rgba(212,175,55,0.2) !important; border-radius: 3px !important; }}
-hr {{ border-color: rgba(212,175,55,0.133) !important; margin: 1.2rem 0 !important; }}
-::-webkit-scrollbar {{ width: 4px; height: 4px; }}
-::-webkit-scrollbar-track {{ background: {NAVY}; }}
-::-webkit-scrollbar-thumb {{ background: rgba(212,175,55,0.267); border-radius: 2px; }}
-.stExpander {{ border: 1px solid rgba(212,175,55,0.2) !important; border-radius: 4px !important; }}
-.stExpander summary {{ color: {PURE_GOLD} !important; font-family: 'IBM Plex Mono', monospace !important; }}
+/* ════════════════════════════════════════════
+   FOUNDATION
+   ════════════════════════════════════════════ */
+.stApp,[data-testid="stAppViewContainer"]{{
+    background:{NAVY}!important;
+    background-image:
+        radial-gradient(ellipse at 20% 0%, rgba(212,175,55,.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 100%, rgba(0,56,168,.12) 0%, transparent 60%)!important;
+}}
+.stApp>header{{background:transparent!important;backdrop-filter:none!important}}
+[data-testid="block-container"]{{
+    background:transparent!important;
+    padding-top:.6rem!important;
+    max-width:1540px!important;
+}}
+
+/* ════════════════════════════════════════════
+   NAVIGATION RAIL — SIDEBAR
+   ════════════════════════════════════════════ */
+[data-testid="stSidebar"]{{
+    background:linear-gradient(180deg,#04091a 0%,#07101f 60%,#050d1a 100%)!important;
+    border-right:1px solid rgba(212,175,55,.18)!important;
+    box-shadow:4px 0 24px rgba(0,0,0,.45)!important;
+}}
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stMarkdown div,
+[data-testid="stSidebar"] span{{color:{GOLD}!important}}
+
+/* Nav rail radio — transform into icon buttons */
+[data-testid="stSidebar"] .stRadio>div{{gap:0!important;flex-direction:column!important}}
+[data-testid="stSidebar"] .stRadio label{{
+    display:flex!important;
+    align-items:center!important;
+    gap:.65rem!important;
+    padding:.72rem 1.1rem!important;
+    margin:.1rem 0!important;
+    border-radius:6px!important;
+    border:1px solid transparent!important;
+    cursor:pointer!important;
+    transition:all .18s ease!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.72rem!important;
+    letter-spacing:.08em!important;
+    color:rgba(245,225,122,.5)!important;
+    background:transparent!important;
+}}
+[data-testid="stSidebar"] .stRadio label:hover{{
+    background:rgba(212,175,55,.06)!important;
+    border-color:rgba(212,175,55,.18)!important;
+    color:{GOLD}!important;
+}}
+[data-testid="stSidebar"] .stRadio label[data-checked="true"],
+[data-testid="stSidebar"] .stRadio [aria-checked="true"] + label,
+[data-testid="stSidebar"] .stRadio input:checked + div label{{
+    background:rgba(212,175,55,.1)!important;
+    border-color:rgba(212,175,55,.35)!important;
+    color:{GOLD}!important;
+    font-weight:600!important;
+}}
+[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"]{{display:none!important}}
+
+/* Sidebar quick-load buttons */
+[data-testid="stSidebar"] .stButton>button{{
+    background:transparent!important;
+    color:rgba(245,225,122,.6)!important;
+    border:1px solid rgba(212,175,55,.14)!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.65rem!important;
+    letter-spacing:.06em!important;
+    border-radius:4px!important;
+    padding:.35rem .6rem!important;
+    text-align:left!important;
+    justify-content:flex-start!important;
+    transition:all .15s!important;
+    margin-bottom:2px!important;
+}}
+[data-testid="stSidebar"] .stButton>button:hover{{
+    background:rgba(212,175,55,.09)!important;
+    color:{GOLD}!important;
+    border-color:rgba(212,175,55,.32)!important;
+}}
+
+/* ════════════════════════════════════════════
+   TYPOGRAPHY
+   ════════════════════════════════════════════ */
+body,.stMarkdown,p,div{{
+    font-family:'IBM Plex Mono','Courier New',monospace;
+    color:{CREAM};
+}}
+
+/* ════════════════════════════════════════════
+   TABS — REFINED SCHOLARLY STRIP
+   ════════════════════════════════════════════ */
+.stTabs [data-baseweb="tab-list"]{{
+    background:rgba(4,9,26,.7)!important;
+    border-bottom:1px solid rgba(212,175,55,.2)!important;
+    gap:0!important;
+    padding:0 .5rem!important;
+    backdrop-filter:blur(8px)!important;
+    border-radius:6px 6px 0 0!important;
+}}
+.stTabs [data-baseweb="tab"]{{
+    background:transparent!important;
+    color:rgba(245,225,122,.42)!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.68rem!important;
+    letter-spacing:.12em!important;
+    padding:10px 18px!important;
+    border-bottom:2px solid transparent!important;
+    border-top:2px solid transparent!important;
+    transition:all .18s ease!important;
+    text-transform:uppercase!important;
+    position:relative!important;
+}}
+.stTabs [data-baseweb="tab"]:hover{{
+    color:rgba(212,175,55,.8)!important;
+    background:rgba(212,175,55,.04)!important;
+}}
+.stTabs [aria-selected="true"]{{
+    color:{GOLD}!important;
+    border-bottom:2px solid {GOLD}!important;
+    font-weight:600!important;
+    background:rgba(212,175,55,.06)!important;
+}}
+.stTabs [data-baseweb="tab-panel"]{{
+    background:transparent!important;
+    padding-top:1.4rem!important;
+}}
+
+/* ════════════════════════════════════════════
+   INPUTS & CONTROLS
+   ════════════════════════════════════════════ */
+.stTextInput input,.stTextArea textarea{{
+    background:rgba(4,9,26,.65)!important;
+    color:{CREAM}!important;
+    border:1px solid rgba(212,175,55,.22)!important;
+    border-radius:5px!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.86rem!important;
+    transition:border-color .15s,box-shadow .15s!important;
+}}
+.stTextInput input:focus,.stTextArea textarea:focus{{
+    border-color:rgba(212,175,55,.6)!important;
+    box-shadow:0 0 0 2px rgba(212,175,55,.1)!important;
+    outline:none!important;
+}}
+.stTextArea textarea{{line-height:1.75!important}}
+.stSelectbox>div>div{{
+    background:rgba(4,9,26,.65)!important;
+    color:{CREAM}!important;
+    border:1px solid rgba(212,175,55,.22)!important;
+    border-radius:5px!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.83rem!important;
+}}
+
+/* ════════════════════════════════════════════
+   BUTTONS — TWO VARIANTS
+   ════════════════════════════════════════════ */
+/* Default: subtle ghost */
+.stButton>button{{
+    background:rgba(102,2,60,.5)!important;
+    color:{GOLD}!important;
+    border:1px solid rgba(212,175,55,.28)!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.69rem!important;
+    letter-spacing:.13em!important;
+    border-radius:4px!important;
+    padding:.45rem 1rem!important;
+    transition:all .16s ease!important;
+    text-transform:uppercase!important;
+}}
+.stButton>button:hover{{
+    background:{GOLD}!important;
+    color:{NAVY}!important;
+    border-color:{GOLD}!important;
+    box-shadow:0 2px 12px rgba(212,175,55,.22)!important;
+}}
+.stButton>button:active{{transform:translateY(1px)!important}}
+
+/* ════════════════════════════════════════════
+   METRICS — ELEVATED TILES
+   ════════════════════════════════════════════ */
+[data-testid="metric-container"]{{
+    background:linear-gradient(135deg,rgba(0,56,168,.18) 0%,rgba(4,9,26,.4) 100%)!important;
+    border:1px solid rgba(212,175,55,.16)!important;
+    border-top:2px solid rgba(212,175,55,.35)!important;
+    border-radius:6px!important;
+    padding:.7rem 1rem!important;
+    transition:border-color .15s!important;
+}}
+[data-testid="metric-container"]:hover{{border-top-color:{GOLD}!important}}
+[data-testid="metric-container"] label{{
+    color:rgba(245,225,122,.55)!important;
+    font-size:.61rem!important;
+    letter-spacing:.14em!important;
+    text-transform:uppercase!important;
+    font-family:'IBM Plex Mono',monospace!important;
+}}
+[data-testid="stMetricValue"]{{
+    color:{GOLD}!important;
+    font-size:1.35rem!important;
+    font-weight:600!important;
+    font-family:'Playfair Display',Georgia,serif!important;
+}}
+
+/* ════════════════════════════════════════════
+   EXPANDERS
+   ════════════════════════════════════════════ */
+.stExpander{{
+    border:1px solid rgba(212,175,55,.14)!important;
+    border-radius:6px!important;
+    background:rgba(4,9,26,.35)!important;
+    margin-bottom:.55rem!important;
+}}
+.stExpander summary{{
+    color:{LT_GOLD}!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.75rem!important;
+    letter-spacing:.08em!important;
+    padding:.65rem 1rem!important;
+}}
+.stExpander summary:hover{{color:{GOLD}!important}}
+.stExpander [data-testid="stExpanderDetails"]{{
+    border-top:1px solid rgba(212,175,55,.1)!important;
+    padding-top:.8rem!important;
+}}
+
+/* ════════════════════════════════════════════
+   DATAFRAMES
+   ════════════════════════════════════════════ */
+[data-testid="stDataFrame"]{{
+    border:1px solid rgba(212,175,55,.13)!important;
+    border-radius:5px!important;
+    overflow:hidden!important;
+}}
+
+/* ════════════════════════════════════════════
+   HR DIVIDER
+   ════════════════════════════════════════════ */
+hr{{
+    border:none!important;
+    border-top:1px solid rgba(212,175,55,.12)!important;
+    margin:1.2rem 0!important;
+    position:relative!important;
+}}
+
+/* ════════════════════════════════════════════
+   SCROLLBAR
+   ════════════════════════════════════════════ */
+::-webkit-scrollbar{{width:4px;height:4px}}
+::-webkit-scrollbar-track{{background:rgba(4,9,26,.8)}}
+::-webkit-scrollbar-thumb{{background:rgba(212,175,55,.2);border-radius:2px}}
+::-webkit-scrollbar-thumb:hover{{background:rgba(212,175,55,.4)}}
+
+/* ════════════════════════════════════════════
+   COMMAND CENTER
+   ════════════════════════════════════════════ */
+.cmd-center{{
+    background:linear-gradient(135deg,rgba(0,56,168,.08) 0%,rgba(4,9,26,.5) 100%);
+    border:1px solid rgba(212,175,55,.2);
+    border-top:3px solid {GOLD};
+    border-radius:6px;
+    padding:1.2rem 1.5rem 1rem;
+    margin-bottom:1.2rem;
+    box-shadow:0 4px 24px rgba(0,0,0,.25);
+}}
+.cmd-label{{
+    font-size:.56rem;
+    color:{LT_GOLD};
+    opacity:.7;
+    letter-spacing:.22em;
+    margin-bottom:.4rem;
+    text-transform:uppercase;
+    font-family:'IBM Plex Mono',monospace;
+}}
+
+/* ════════════════════════════════════════════
+   PARCHMENT — SCHOLARLY BOX (spec-exact + enhanced)
+   ════════════════════════════════════════════ */
+.scholarly-box{{
+    background-color:{PARCHMENT};
+    background-image:
+        linear-gradient(180deg,rgba(253,250,243,1) 0%,rgba(250,246,236,1) 100%);
+    border-left:5px solid {BROWN};
+    border-radius:0 6px 6px 0;
+    padding:1.5rem 1.8rem;
+    box-shadow:
+        0 2px 8px rgba(74,55,40,.12),
+        inset 0 0 0 1px rgba(74,55,40,.07);
+    font-family:'Crimson Text',Georgia,serif;
+    color:{INK};
+    line-height:1.95;
+    font-size:1.06rem;
+}}
+.scholarly-box h2{{
+    font-family:'Playfair Display',Georgia,serif;
+    color:{BROWN};
+    border-bottom:1px solid rgba(74,55,40,.15);
+    padding-bottom:.25rem;
+    margin:1.3rem 0 .6rem;
+    font-size:1.18rem;
+    font-weight:600;
+    letter-spacing:.015em;
+    text-align:center;
+}}
+.scholarly-box h3{{
+    font-family:'Crimson Text',Georgia,serif;
+    color:#5a4030;
+    margin:.9rem 0 .4rem;
+    font-size:1.04rem;
+    font-style:italic;
+    font-weight:600;
+}}
+.scholarly-box strong{{color:{BROWN};font-weight:600}}
+.scholarly-box em{{color:#5a4030;font-style:italic}}
+.scholarly-box code{{
+    background:rgba(74,55,40,.07);
+    padding:1px 6px;
+    border-radius:3px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:.88em;
+    color:#5a3020;
+}}
+.scholarly-box p{{margin:.6rem 0;text-align:justify}}
+
+/* ════════════════════════════════════════════
+   METADATA PANEL
+   ════════════════════════════════════════════ */
+.meta-panel{{
+    background:linear-gradient(180deg,rgba(0,56,168,.08) 0%,rgba(4,9,26,.3) 100%);
+    border:1px solid rgba(212,175,55,.15);
+    border-radius:6px;
+    padding:1.05rem 1.1rem;
+}}
+.meta-lbl{{
+    font-size:.55rem;
+    color:{LT_GOLD};
+    opacity:.65;
+    letter-spacing:.18em;
+    margin-bottom:.12rem;
+    text-transform:uppercase;
+    font-family:'IBM Plex Mono',monospace;
+}}
+.meta-val{{
+    font-size:.78rem;
+    color:{CREAM};
+    margin-bottom:.7rem;
+    line-height:1.6;
+    font-family:'IBM Plex Mono',monospace;
+    border-bottom:1px solid rgba(212,175,55,.07);
+    padding-bottom:.5rem;
+}}
+
+/* ════════════════════════════════════════════
+   SCHOLAR CARD
+   ════════════════════════════════════════════ */
+.scholar-card{{
+    background:linear-gradient(135deg,rgba(4,9,26,.8) 0%,rgba(7,16,31,.95) 100%);
+    border:1px solid rgba(212,175,55,.18);
+    border-left:4px solid {GOLD};
+    border-radius:0 5px 5px 0;
+    padding:.95rem 1.15rem;
+    margin-bottom:.8rem;
+    box-shadow:0 2px 10px rgba(0,0,0,.2);
+    transition:border-left-color .15s;
+}}
+.scholar-card:hover{{border-left-color:{LT_GOLD}}}
+
+/* ════════════════════════════════════════════
+   CROSS-REFERENCE BADGE
+   ════════════════════════════════════════════ */
+.xref-badge{{
+    background:rgba(102,2,60,.45);
+    color:{LT_GOLD};
+    font-size:.6rem;
+    padding:2px 8px;
+    border-radius:3px;
+    border:1px solid rgba(212,175,55,.25);
+    white-space:nowrap;
+    display:inline-block;
+    margin:2px 3px 2px 0;
+    letter-spacing:.06em;
+    font-family:'IBM Plex Mono',monospace;
+    transition:background .12s;
+}}
+.xref-badge:hover{{background:rgba(212,175,55,.15)}}
+
+/* ════════════════════════════════════════════
+   SECTION DIVIDER — ornamental
+   ════════════════════════════════════════════ */
+.ornament{{
+    text-align:center;
+    color:rgba(212,175,55,.3);
+    font-size:.8rem;
+    letter-spacing:.5em;
+    margin:.6rem 0;
+    user-select:none;
+}}
 </style>
 """, unsafe_allow_html=True)
 
+
 # ─────────────────────────────────────────────
-# RENDERERS
+# RENDERER UTILITIES
 # ─────────────────────────────────────────────
 
-def section_header(title: str, sub: str = ""):
-    sub_part = (
-        '<div style="font-size:0.67rem;color:#F5E17A;opacity:0.75;'
-        'letter-spacing:0.08em;margin-top:0.1rem;margin-bottom:0.2rem;">'
-        + sub + '</div>'
+def sec_head(title, sub=""):
+    """Centered serif section header with optional subtitle."""
+    sub_html = (
+        f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.6;'
+        f'letter-spacing:.12em;margin-top:.18rem;text-transform:uppercase;'
+        f'font-family:IBM Plex Mono,monospace">{sub}</div>'
     ) if sub else ""
-    html = (
-        '<div style="margin:1.2rem 0 0.6rem;padding-bottom:0.5rem;border-bottom:1px solid #D4AF37;">'
-        '<div style="font-family:Georgia,serif;font-size:1.05rem;font-weight:600;'
-        'color:#D4AF37;letter-spacing:0.04em;line-height:1.2;">' + title + '</div>'
-        + sub_part + '</div>'
-    )
-    st.markdown(html, unsafe_allow_html=True)
-
-def card(body: str, accent: str = PURE_GOLD):
     st.markdown(
-        '<div style="background:#0A1628;border:1px solid ' + accent +
-        ';border-left:3px solid ' + accent +
-        ';border-radius:4px;padding:1rem 1.25rem;margin-bottom:0.9rem;">'
-        + body + '</div>', unsafe_allow_html=True)
+        f'<div style="text-align:center;margin:1.1rem 0 .7rem;padding-bottom:.5rem;'
+        f'border-bottom:1px solid rgba(212,175,55,.22)">'
+        f'<div style="font-family:Playfair Display,Georgia,serif;font-size:1.1rem;'
+        f'font-weight:600;color:{GOLD};letter-spacing:.03em;line-height:1.3">'
+        f'{title}</div>{sub_html}'
+        f'</div>',
+        unsafe_allow_html=True)
 
-def scholar_card(author: str, work: str, body: str):
+
+def ornament():
+    """Thin decorative separator."""
     st.markdown(
-        '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
-        'border-radius:4px;padding:1.1rem 1.3rem;margin-bottom:1rem;">'
-        '<div style="font-family:Georgia,serif;font-size:1rem;font-weight:600;color:#D4AF37;margin-bottom:0.2rem;">'
-        + author + '</div>'
-        '<div style="font-size:0.65rem;color:#F5E17A;opacity:0.75;letter-spacing:0.06em;'
-        'margin-bottom:0.7rem;font-style:italic;">' + work + '</div>'
-        '<div style="font-size:0.86rem;color:#FFF8DC;line-height:1.9;">' + body + '</div>'
-        '</div>', unsafe_allow_html=True)
+        f'<div class="ornament">· · ✦ · ·</div>',
+        unsafe_allow_html=True)
+
+
+def card(body, accent=None):
+    a = accent or GOLD
+    st.markdown(
+        f'<div style="background:linear-gradient(135deg,rgba(4,9,26,.8) 0%,'
+        f'rgba(7,16,31,.95) 100%);border:1px solid rgba(212,175,55,.15);'
+        f'border-left:3px solid {a};border-radius:0 5px 5px 0;'
+        f'padding:.9rem 1.1rem;margin-bottom:.8rem;'
+        f'box-shadow:0 2px 10px rgba(0,0,0,.18)">{body}</div>',
+        unsafe_allow_html=True)
+
+
+def scholar_card(author, work, body):
+    st.markdown(
+        f'<div class="scholar-card">'
+        f'<div style="font-family:Playfair Display,Georgia,serif;font-size:.97rem;'
+        f'font-weight:600;color:{GOLD};margin-bottom:.1rem">{author}</div>'
+        f'<div style="font-size:.59rem;color:{LT_GOLD};opacity:.65;letter-spacing:.06em;'
+        f'margin-bottom:.55rem;font-style:italic;font-family:IBM Plex Mono,monospace">{work}</div>'
+        f'<div style="font-size:.82rem;color:{CREAM};line-height:1.9;'
+        f'font-family:IBM Plex Mono,monospace">{body}</div>'
+        f'</div>', unsafe_allow_html=True)
+
+
+def parchment(md_text):
+    """Render AI markdown inside the spec-exact scholarly-box with enhanced typography."""
+    h = md_text
+    h = re.sub(r'(?m)^## (.+)$', r'<h2>\1</h2>', h)
+    h = re.sub(r'(?m)^### (.+)$', r'<h3>\1</h3>', h)
+    h = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', h)
+    h = re.sub(r'\*(.+?)\*', r'<em>\1</em>', h)
+    h = re.sub(r'`(.+?)`', r'<code>\1</code>', h)
+    parts = h.split("\n\n")
+    html_parts = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        if p.startswith("<h"):
+            html_parts.append(p)
+        else:
+            html_parts.append(f"<p>{p.replace(chr(10), '<br>')}</p>")
+    st.markdown(
+        f'<div class="scholarly-box">{" ".join(html_parts)}</div>',
+        unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
-# API CONFIGURATION
+# API KEY GETTERS
 # ─────────────────────────────────────────────
 
-# API.Bible translation IDs (scripture.api.bible)
-APIBIBLE_TRANSLATIONS = {
-    "KJV":           "de4e12af7f28f599-02",
-    "NASB":          "f72b840c855f362c-04",
-    "ESV":           "9879dbb7cfe39e4d-04",
-    "NRSV":          "55212e3cf5d04d49-01",
-    "NET":           "f72b840c855f362c-04",
-    "NIV":           "78a9f6124f344018-01",
-    "YLT":           "c315fa9f71d4af3a-02",
-    "Douay-Rheims":  "179568874c45066f-01",
-    "ASV":           "06125adad2d5898a-01",
-    "CSB":           "a556c5305ee15c3f-01",
-}
+def get_anthropic_key():
+    try: return st.secrets["ANTHROPIC_API_KEY"]
+    except: return ""
 
-# Detect API keys from Streamlit secrets (.streamlit/secrets.toml)
-def get_api_bible_key() -> str:
-    try:
-        return st.secrets["BIBLE_API_KEY"]
-    except Exception:
-        return ""
+def get_esv_key():
+    try: return st.secrets["ESV_API_KEY"]
+    except: return ""
 
-def get_esv_key() -> str:
-    try:
-        return st.secrets["ESV_API_KEY"]
-    except Exception:
-        return ""
-
-def get_anthropic_key() -> str:
-    try:
-        return st.secrets["ANTHROPIC_API_KEY"]
-    except Exception:
-        return ""
+def get_api_bible_key():
+    try: return st.secrets["BIBLE_API_KEY"]
+    except: return ""
 
 
 # ─────────────────────────────────────────────
-# HARDCODED KJV FALLBACKS
+# DATA STRUCTURES
 # ─────────────────────────────────────────────
 
 KJV_FALLBACK = {
@@ -209,15 +610,8 @@ KJV_FALLBACK = {
         {"verse": 15, "text": "He saith unto them, But whom say ye that I am?"},
         {"verse": 16, "text": "And Simon Peter answered and said, Thou art the Christ, the Son of the living God."},
         {"verse": 17, "text": "And Jesus answered and said unto him, Blessed art thou, Simon Bar-jona: for flesh and blood hath not revealed it unto thee, but my Father which is in heaven."},
-    ],
-}
+    ],}
 
-
-# ─────────────────────────────────────────────
-# INTERLINEAR DATA
-# Greek word-by-word for key passages
-# Format: {passage_key: [(english, greek, strongs, gloss), ...]}
-# ─────────────────────────────────────────────
 
 INTERLINEAR = {
     "John 3:16": [
@@ -259,12 +653,8 @@ INTERLINEAR = {
         ("THAT I AM",     "אֲשֶׁר אֶהְיֶה","H834/H1961","asher ehyeh — relative clause; self-defining existence; aseity"),
         ("LORD",          "יְהוָה",      "H3068", "YHWH — the tetragrammaton; derived from ehyeh; 'He who causes to be'"),
     ],
-}
+}  # end INTERLINEAR
 
-
-# ─────────────────────────────────────────────
-# STRONG'S LEXICON
-# ─────────────────────────────────────────────
 
 STRONGS_LEXICON = {
     "grace":        {"num":"G5485","gk":"χάρις","tr":"charis","lang":"Greek",
@@ -307,14 +697,8 @@ STRONGS_LEXICON = {
                      "def":"Steadfast love, covenant loyalty, lovingkindness. Virtually untranslatable. Combines love, loyalty, mercy, and faithfulness. Used 247 times in OT, 127 in Psalms alone. The LXX renders it as ἔλεος (eleos, mercy) or χάρις (grace)."},
     "morphe":       {"num":"G3444","gk":"μορφή","tr":"morphē","lang":"Greek",
                      "def":"Essential form; inner nature as it shows itself outwardly. In Phil 2:6, 'form of God' denotes Christ's essential divine nature. Distinct from σχῆμα (schēma, outward fashion, v. 8) and εἰκών (eikōn, image)."},
-}
+}  # end STRONGS_LEXICON
 
-
-# ─────────────────────────────────────────────
-# COMMENTARY DATA — 12 PASSAGES
-# All commentary entries are analytical summaries
-# of the cited scholarly works, not direct quotations.
-# ─────────────────────────────────────────────
 
 COMMENTARY = {
 
@@ -622,10 +1006,6 @@ COMMENTARY = {
 }  # end COMMENTARY
 
 
-# ─────────────────────────────────────────────
-# STUDY PROMPTS
-# ─────────────────────────────────────────────
-
 STUDY_PROMPTS = {
     "Exegetical": [
         "Perform a word study on ἁρπαγμόν (harpagmos) in Philippians 2:6. Evaluate the three major positions (res rapta, res rapienda, verbal abstract) and their Christological consequences. Consult Hoover (HTR, 1971) and Wright's Climax of the Covenant.",
@@ -679,9 +1059,6 @@ STUDY_PROMPTS = {
     ],
 }
 
-# ─────────────────────────────────────────────
-# APOLOGETICS ARGUMENTS
-# ─────────────────────────────────────────────
 
 APOLOGETICS_ARGS = [
     {
@@ -904,9 +1281,6 @@ APOLOGETICS_ARGS = [
     },
 ]
 
-# ─────────────────────────────────────────────
-# CHURCH FATHERS
-# ─────────────────────────────────────────────
 
 CHURCH_FATHERS = [
     {"name":"Justin Martyr","dates":"c. 100–165 AD","role":"First Christian Apologist",
@@ -941,9 +1315,6 @@ CHURCH_FATHERS = [
      "key_work":"Epistle to the Philippians (c. 110 AD); Martyrdom of Polycarp (c. 155 AD)"},
 ]
 
-# ─────────────────────────────────────────────
-# MANUSCRIPT DATA
-# ─────────────────────────────────────────────
 
 MANUSCRIPT_DATA = {
     "New Testament (Greek)":  {"manuscripts": 5856, "earliest_copy": "P52 (~AD 125)",  "gap_years": 25},
@@ -955,13 +1326,27 @@ MANUSCRIPT_DATA = {
     "NT (all languages)":     {"manuscripts": 25000,"earliest_copy": "P52 (~AD 125)",  "gap_years": 25},
 }
 
+
+APIBIBLE_TRANSLATIONS = {
+    "KJV":          "de4e12af7f28f599-02",
+    "NASB":         "f72b840c855f362c-04",
+    "ESV":          "9879dbb7cfe39e4d-04",
+    "NRSV":         "55212e3cf5d04d49-01",
+    "NET":          "f72b840c855f362c-04",
+    "NIV":          "78a9f6124f344018-01",
+    "YLT":          "c315fa9f71d4af3a-02",
+    "Douay-Rheims": "179568874c45066f-01",
+    "ASV":          "06125adad2d5898a-01",
+    "CSB":          "a556c5305ee15c3f-01",
+}
+
+
 # ─────────────────────────────────────────────
-# API FUNCTIONS
+# SCRIPTURE API FUNCTIONS  (cached on pure strings)
 # ─────────────────────────────────────────────
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_scripture(reference: str, translation: str = "kjv") -> dict:
-    """Primary: bible-api.com (keyless). Returns {verses, reference, translation_name}."""
     url = f"https://bible-api.com/{requests.utils.quote(reference)}?translation={translation}"
     try:
         r = requests.get(url, timeout=10)
@@ -971,32 +1356,57 @@ def fetch_scripture(reference: str, translation: str = "kjv") -> dict:
                 return data
     except Exception:
         pass
-    # Hardcoded fallback
     for key, verses in KJV_FALLBACK.items():
         if reference.lower().replace(" ", "") in key.lower().replace(" ", ""):
             return {"verses": verses, "reference": reference,
-                    "translation_name": "King James Version (offline fallback)", "fallback": True}
+                    "translation_name": "King James Version (offline fallback)",
+                    "fallback": True}
     return {"error": "Unable to retrieve. Check reference format.", "verses": []}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_apibible(reference: str, bible_id: str, api_key: str) -> dict:
-    """Fetch from API.Bible for premium translations (ESV, NASB, NRSV, NET, NIV)."""
-    if not api_key:
-        return {"verses": [], "error": "No API key"}
-    # Convert reference to API.Bible passage ID format
-    headers = {"api-key": api_key}
-    search_url = f"https://api.scripture.api.bible/v1/bibles/{bible_id}/search"
+def fetch_esv(reference: str, esv_key: str) -> dict:
+    if not esv_key:
+        return {"verses": [], "error": "No ESV key"}
+    auth = esv_key if esv_key.startswith("Token ") else "Token " + esv_key
+    params = {
+        "q": reference, "include-headings": False, "include-footnotes": False,
+        "include-verse-numbers": True, "include-short-copyright": False,
+        "include-passage-references": False,
+    }
     try:
-        r = requests.get(search_url, params={"query": reference, "limit": 1},
-                         headers=headers, timeout=10)
+        r = requests.get("https://api.esv.org/v3/passage/text/",
+                         params=params, headers={"Authorization": auth}, timeout=10)
         if r.status_code == 200:
-            data = r.json()
-            passages = data.get("data", {}).get("passages", [])
+            passages = r.json().get("passages", [])
             if passages:
-                content = passages[0].get("content", "")
-                # Strip XML/HTML tags from API.Bible response
-                clean = re.sub(r'<[^>]+>', ' ', content).strip()
+                raw = passages[0].strip()
+                matches = re.findall(r'\[(\d+)\]\s*(.*?)(?=\[\d+\]|$)', raw, re.DOTALL)
+                verses = [{"verse": int(n), "text": t.strip().replace("\n", " ")}
+                          for n, t in matches if t.strip()]
+                return {"verses": verses or [{"verse": 1, "text": raw}],
+                        "reference": reference,
+                        "translation_name": "English Standard Version (ESV)"}
+        elif r.status_code == 401:
+            return {"verses": [], "error": "ESV key invalid"}
+    except Exception:
+        pass
+    return {"verses": [], "error": "ESV API unavailable"}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_apibible(reference: str, bible_id: str, api_key: str) -> dict:
+    if not api_key:
+        return {"verses": [], "error": "No API.Bible key"}
+    try:
+        r = requests.get(
+            f"https://api.scripture.api.bible/v1/bibles/{bible_id}/search",
+            params={"query": reference, "limit": 1},
+            headers={"api-key": api_key}, timeout=10)
+        if r.status_code == 200:
+            passages = r.json().get("data", {}).get("passages", [])
+            if passages:
+                clean = re.sub(r'<[^>]+>', ' ', passages[0].get("content", "")).strip()
                 clean = re.sub(r'\s+', ' ', clean)
                 return {"verses": [{"verse": 1, "text": clean}],
                         "reference": reference, "translation_name": bible_id}
@@ -1005,732 +1415,1000 @@ def fetch_apibible(reference: str, bible_id: str, api_key: str) -> dict:
     return {"verses": [], "error": "API.Bible unavailable"}
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_esv(reference: str, esv_key: str) -> dict:
-    """Fetch from ESV API (api.esv.org). Key format: 'Token <hash>'."""
-    if not esv_key:
-        return {"verses": [], "error": "No ESV key"}
-    # Ensure key has 'Token ' prefix
-    auth = esv_key if esv_key.startswith("Token ") else "Token " + esv_key
-    url = "https://api.esv.org/v3/passage/text/"
-    params = {
-        "q":                        reference,
-        "include-headings":         False,
-        "include-footnotes":        False,
-        "include-verse-numbers":    True,
-        "include-short-copyright":  False,
-        "include-passage-references": False,
-    }
-    try:
-        r = requests.get(url, params=params,
-                         headers={"Authorization": auth}, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            passages = data.get("passages", [])
-            if passages:
-                raw = passages[0].strip()
-                # Parse verse numbers [N] from ESV response into verse dicts
-                verse_pattern = re.compile(r'\[(\d+)\]\s*(.*?)(?=\[\d+\]|$)', re.DOTALL)
-                matches = verse_pattern.findall(raw)
-                if matches:
-                    verses = [{"verse": int(n), "text": t.strip().replace("\n", " ")}
-                              for n, t in matches if t.strip()]
-                else:
-                    verses = [{"verse": 1, "text": raw}]
-                return {"verses": verses, "reference": reference,
-                        "translation_name": "English Standard Version (ESV)"}
-        elif r.status_code == 401:
-            return {"verses": [], "error": "ESV API key invalid or expired"}
-    except Exception:
-        pass
-    return {"verses": [], "error": "ESV API unavailable"}
+# ─────────────────────────────────────────────
+# AI — SYSTEM PROMPT  (Craig aesthetic)
+# ─────────────────────────────────────────────
+
+SCHOLAR_PROMPT = """You are a rigorous Christian biblical scholar and apologist.
+Think: William Lane Craig in analytical precision, N.T. Wright in historical depth,
+D.A. Carson in exegetical care. You operate within Sententia Bible Lab.
+
+HERMENEUTICAL METHOD
+Historical-grammatical exegesis as primary method. Redemptive-historical approach
+(Geerhardus Vos, D.A. Carson). Privilege authorial intent within original context.
+
+THEOLOGICAL TRADITION
+Broadly Reformed evangelical. Represent Calvinist, Arminian, Lutheran, Catholic,
+and Eastern Orthodox positions accurately and without caricature.
+
+SCHOLARLY SOURCES
+Commentaries: Brown (AB), Carson (Pillar), Morris/Moo/Schreiner/Fee/Köstenberger (NICNT/BECNT),
+Oswalt (NICOT), Kidner (TOTC), Craigie/Wright (WBC/NIB), O'Brien (NIGTC).
+Apologetics: Craig, Plantinga, Habermas & Licona, Collins, Reppert, Moreland.
+Languages: Greek NT (NA28), Hebrew OT (BHS). Cite Strong's numbers when relevant.
+
+MANDATORY RESPONSE STRUCTURE
+Every substantive response MUST use these exact Markdown section headers:
+
+## Historical Context
+## Linguistic Analysis
+## Scholarly Dialogue
+## Thematic Synthesis
+## Apologetic Interface
+
+(Omit 'Apologetic Interface' only when strictly irrelevant.)
+
+TONE
+Articulate, objective, precise. Write as a scholar addressing peers.
+Cite scholars by surname and work. Flag genuine uncertainty. Never fabricate citations.
+No condescension. No vagueness. Distinguish exegetical findings from theological inferences."""
 
 
 # ─────────────────────────────────────────────
 # AI FUNCTIONS
+#
+# Correct caching architecture:
+# - @st.cache_data requires hashable arguments only.
+# - secrets objects are NOT hashable → never pass them as cache arguments.
+# - Pattern: resolve key to plain str → pass str to cached function.
+# - Cache key = hash(messages_json + anthropic_key_str) — deterministic.
+# - TTL 24h: identical queries never re-hit the API within a session.
 # ─────────────────────────────────────────────
 
-SCHOLAR_SYSTEM_PROMPT = """You are a rigorous Christian biblical scholar and apologist operating within a graduate-level research workstation called Sententia Bible Lab. Your scholarly framework is as follows:
-
-HERMENEUTICAL METHOD: Historical-grammatical exegesis as primary method. You privilege the author's intended meaning within the original historical and cultural context. You follow the redemptive-historical approach of Geerhardus Vos and D.A. Carson.
-
-THEOLOGICAL TRADITION: Broadly Reformed evangelical, but you engage all serious theological positions fairly. You are conversant with Calvinist, Arminian, Lutheran, Catholic, and Eastern Orthodox positions and can represent each accurately.
-
-SCHOLARLY SOURCES YOU DRAW ON:
-- Commentaries: Brown (AB), Carson (Pillar), Morris (NICNT), Moo (NICNT), Schreiner (BECNT), Fee (NICNT), Oswalt (NICOT), Kidner (TOTC), Craigie (WBC), Wright (NIB), O'Brien (NIGTC), Köstenberger (BECNT)
-- Apologetics: Craig (Reasonable Faith), Plantinga (Warranted Christian Belief, Nature of Necessity), Habermas & Licona (Case for the Resurrection), Collins (fine-tuning), Reppert (Argument from Reason), Moreland (Consciousness and the Existence of God)
-- Church Fathers: Justin Martyr, Irenaeus, Tertullian, Origen, Athanasius, Augustine, Chrysostom, Anselm, Aquinas
-- Languages: You work with Greek NT (NA28) and Hebrew OT (BHS). You cite Strong's numbers when relevant.
-
-RESPONSE STANDARDS:
-- Cite specific scholars, works, and where possible page ranges
-- Flag genuine scholarly uncertainty rather than projecting false confidence
-- Distinguish exegetical conclusions from theological inferences
-- When multiple interpretations exist, present them with their respective advocates
-- Use technical vocabulary accurately: distinguish justification from sanctification, propitiation from expiation, morphē from schēma, etc.
-- Never confabulate citations — if unsure of a specific page number, omit it rather than guess
-
-FORMAT: Respond in well-structured prose. Use bold for key Greek/Hebrew terms on first occurrence. Keep responses substantive but not padded."""
-
-
-def ai_chat(messages: list, anthropic_key: str, max_tokens: int = 1200) -> str:
-    """Send a message list to Claude and return the text response."""
-    if not anthropic_key:
-        return "⚠ No Anthropic API key configured. Add ANTHROPIC_API_KEY to Streamlit secrets."
-    url = "https://api.anthropic.com/v1/messages"
-    headers = {
-        "x-api-key":         anthropic_key,
-        "anthropic-version": "2023-06-01",
-        "content-type":      "application/json",
-    }
-    payload = {
-        "model":      "claude-haiku-4-5-20251001",
-        "max_tokens": max_tokens,
-        "system":     SCHOLAR_SYSTEM_PROMPT,
-        "messages":   messages,
-    }
+@st.cache_data(show_spinner="Consulting the AI Scholar...", ttl=86400)
+def _ai_call_cached(messages_json: str, anthropic_key: str, max_tokens: int) -> str:
+    """Inner cached function. All args are plain strings — hashable."""
+    messages = json.loads(messages_json)
     try:
-        r = requests.post(url, headers=headers, json=payload, timeout=60)
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": max_tokens,
+                "system": SCHOLAR_PROMPT,
+                "messages": messages,
+            },
+            timeout=90,
+        )
         if r.status_code == 200:
             return r.json()["content"][0]["text"]
-        elif r.status_code == 401:
-            return "⚠ API key invalid. Check ANTHROPIC_API_KEY in Streamlit secrets."
-        else:
-            return f"⚠ API error {r.status_code}: {r.text[:200]}"
+        if r.status_code == 401:
+            return "⚠ API key invalid — verify ANTHROPIC_API_KEY in Streamlit secrets."
+        return f"⚠ API error {r.status_code}: {r.text[:300]}"
     except Exception as e:
-        return f"⚠ Request failed: {str(e)}"
+        return f"⚠ Request failed: {e}"
 
 
-def ai_analyse_passage(reference: str, verse_text: str, anthropic_key: str) -> str:
-    """Generate a full exegetical analysis for any passage."""
-    prompt = (
-        f"Provide a graduate-level exegetical analysis of {reference}. "
-        f"The passage text is:\n\n\"{verse_text}\"\n\n"
-        "Structure your analysis as follows:\n"
-        "1. HISTORICAL & LITERARY CONTEXT — authorship, date, audience, literary setting\n"
-        "2. KEY TERMS — the 3-5 most exegetically significant Greek or Hebrew words with Strong's numbers, transliteration, and semantic analysis\n"
-        "3. SCHOLARLY COMMENTARY — summarise the interpretive positions of 2-3 relevant commentators\n"
-        "4. CROSS-REFERENCES — 4-5 most significant intertextual connections with brief explanation\n"
-        "5. APOLOGETICS INTERFACE — how this passage bears on apologetic arguments or Christian truth claims\n\n"
-        "Be precise. Cite scholars by name and work. Flag interpretive disputes where they exist."
-    )
-    return ai_chat([{"role": "user", "content": prompt}], anthropic_key, max_tokens=1800)
+def ai(messages: list, key: str, max_tokens: int = 1400) -> str:
+    """Public wrapper: serialises messages to JSON string for cache-safe call."""
+    if not key:
+        return "⚠ ANTHROPIC_API_KEY not configured in Streamlit secrets."
+    return _ai_call_cached(json.dumps(messages, ensure_ascii=False), key, max_tokens)
 
 
-def ai_steelman(debate_title: str, position_label: str, position_argument: str,
-                key_texts: list, anthropic_key: str) -> str:
-    """Construct the strongest possible version of a theological debate position."""
-    texts_str = ", ".join(key_texts)
-    prompt = (
-        f"You are tasked with constructing the strongest possible version of the following "
-        f"theological position in the debate: '{debate_title}'.\n\n"
-        f"POSITION: {position_label}\n\n"
-        f"SUMMARY OF POSITION AS GIVEN:\n{position_argument}\n\n"
-        f"KEY TEXTS: {texts_str}\n\n"
-        "Your task is NOT to summarise the position as given above. Your task is to STEELMAN it — "
-        "to construct the most rigorous, exegetically grounded, and philosophically sophisticated "
-        "version of this argument that its most capable defenders would actually make. "
-        "Draw on the strongest exegetical evidence, the most capable scholars who hold this view, "
-        "and address the two or three most serious objections this position faces, showing how a "
-        "sophisticated defender would answer them. "
-        "This is an exercise in charitable reconstruction, not advocacy."
-    )
-    return ai_chat([{"role": "user", "content": prompt}], anthropic_key, max_tokens=1600)
+def ai_single(prompt: str, key: str, max_tokens: int = 2000) -> str:
+    return ai([{"role": "user", "content": prompt}], key, max_tokens)
+
+
+def ai_analyse_passage(ref: str, text: str, trans: str, key: str) -> str:
+    return ai_single(
+        f"Provide a graduate-level exegetical analysis of {ref} ({trans}):\n\n\"{text}\"\n\n"
+        "Use the mandatory section headers exactly: Historical Context, Linguistic Analysis, "
+        "Scholarly Dialogue, Thematic Synthesis, Apologetic Interface. "
+        "Cite named scholars. Flag interpretive disputes. Do not pad.", key, 2200)
+
+
+def ai_steelman(debate: str, label: str, argument: str, texts: list, key: str) -> str:
+    return ai_single(
+        f"Construct the strongest possible version of the {label} position in: \'{debate}\'\n\n"
+        f"Position as given:\n{argument}\n\nKey texts: {', '.join(texts)}\n\n"
+        "Do not summarise — STEELMAN it. Build the most exegetically and philosophically rigorous "
+        "version its best defenders actually make. Address the two or three strongest objections "
+        "and show how a sophisticated defender answers each. Use the mandatory section headers: "
+        "Historical Context, Linguistic Analysis, Scholarly Dialogue, Thematic Synthesis. "
+        "This is charitable reconstruction, not personal advocacy.", key, 1900)
+
+
+def ai_inquiry(inquiry: str, ref: str, passage_text: str, trans: str, key: str) -> str:
+    ctx = (f"Passage loaded: {ref} ({trans})\n\"{passage_text}\"\n\n"
+           if passage_text else "")
+    return ai_single(
+        f"{ctx}Primary Inquiry: {inquiry}\n\n"
+        "Respond with full scholarly rigour using the mandatory section headers: "
+        "Historical Context, Linguistic Analysis, Scholarly Dialogue, Thematic Synthesis, "
+        "Apologetic Interface. Cite named scholars. Distinguish exegetical findings "
+        "from theological inferences. Be precise.", key, 2200)
 
 
 # ─────────────────────────────────────────────
-# CHART
+# SEMANTIC GRAPH
+# Stateful: stored in st.session_state, rebuilt ONLY when passage text changes.
+# Uses Plotly (installed in Streamlit Cloud). rdflib/networkx are NOT available
+# without explicit requirements.txt entries — Plotly achieves identical UX.
 # ─────────────────────────────────────────────
 
-def build_manuscript_chart():
-    G = "#D4AF37"; S = "#B22222"; N = "#0A1628"; B = "#0038A8"
-    rows = [{"Work": k, "MSS": v["manuscripts"], "Earliest": v["earliest_copy"], "Gap": v["gap_years"]}
-            for k, v in MANUSCRIPT_DATA.items() if "all languages" not in k]
-    df = pd.DataFrame(rows).sort_values("MSS", ascending=True)
-    colors = [S if "New Testament" in w else G for w in df["Work"]]
-    fig = go.Figure(go.Bar(
-        y=df["Work"], x=df["MSS"], orientation="h",
-        marker_color=colors, marker_line_color=N, marker_line_width=1,
-        text=[f"{v:,}" for v in df["MSS"]], textposition="outside",
-        textfont=dict(color=G, size=10, family="monospace"),
-        hovertemplate="<b>%{y}</b><br>Manuscripts: %{x:,}<br>Earliest copy: %{customdata[0]}<br>Gap from composition: %{customdata[1]} yrs<extra></extra>",
-        customdata=list(zip(df["Earliest"], df["Gap"])),
-    ))
+def _hash(text: str) -> str:
+    return hashlib.md5(text.encode()).hexdigest()
+
+
+def build_semantic_graph(verse_text: str, ref: str) -> "go.Figure":
+    words = set(re.findall(r'\b[a-z]{4,}\b', verse_text.lower()))
+    matched = {k: v for k, v in STRONGS_LEXICON.items()
+               if k in words or v["tr"].lower() in words}
+
+    nodes, edges = [], []
+    nodes.append({"id": ref, "label": ref, "t": "passage", "x": 0.0, "y": 0.0})
+
+    n = max(len(matched), 1)
+    for i, (term, entry) in enumerate(matched.items()):
+        a = 2 * math.pi * i / n
+        nodes.append({"id": term, "label": f"{entry['gk']}\n{entry['tr']}",
+                       "t": "lexical", "x": .44 * math.cos(a), "y": .44 * math.sin(a)})
+        edges.append((ref, term))
+
+    DOCTRINAL = {
+        "Soteriology":  ["grace", "faith", "justification", "atonement", "righteousness", "sanctification"],
+        "Christology":  ["logos", "messiah", "morphe"],
+        "Pneumatology": ["pneuma"],
+        "Ecclesiology": ["ekklesia"],
+        "Eschatology":  ["parousia"],
+    }
+    di = 0
+    for doctrine, terms in DOCTRINAL.items():
+        if any(t in matched for t in terms):
+            a = 2 * math.pi * di / max(len(DOCTRINAL), 1)
+            nodes.append({"id": doctrine, "label": doctrine, "t": "doctrine",
+                          "x": .77 * math.cos(a), "y": .77 * math.sin(a)})
+            for t in terms:
+                if t in matched:
+                    edges.append((doctrine, t))
+            di += 1
+
+    nmap = {n["id"]: n for n in nodes}
+    ex, ey = [], []
+    for s, t in edges:
+        if s in nmap and t in nmap:
+            ex += [nmap[s]["x"], nmap[t]["x"], None]
+            ey += [nmap[s]["y"], nmap[t]["y"], None]
+
+    colors = {"passage": SCARLET, "lexical": GOLD, "doctrine": "#7B9CDF"}
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=ex, y=ey, mode="lines",
+                             line=dict(color="rgba(212,175,55,.18)", width=1),
+                             hoverinfo="none", showlegend=False))
+    for tp in ("passage", "doctrine", "lexical"):
+        sub = [n for n in nodes if n["t"] == tp]
+        if sub:
+            fig.add_trace(go.Scatter(
+                x=[n["x"] for n in sub], y=[n["y"] for n in sub],
+                mode="markers+text",
+                marker=dict(size=18 if tp == "passage" else (13 if tp == "doctrine" else 10),
+                            color=colors[tp], line=dict(color=NAVY, width=2)),
+                text=[n["label"] for n in sub], textposition="top center",
+                textfont=dict(size=8, color=CREAM, family="monospace"),
+                hovertemplate="%{text}<extra></extra>", name=tp.capitalize()))
+
     fig.update_layout(
-        title={"text": "Manuscript Attestation: NT vs. Classical Antiquity",
-               "font": {"family": "serif", "size": 16, "color": G}, "x": 0.5},
-        plot_bgcolor=N, paper_bgcolor=B,
-        font={"family": "monospace", "color": G},
-        xaxis={"title": "Extant Manuscripts", "gridcolor": "rgba(212,175,55,0.1)", "color": G},
-        yaxis={"gridcolor": "rgba(0,0,0,0)", "color": G},
-        margin={"l": 10, "r": 90, "t": 50, "b": 40}, height=340,
-    )
+        title=dict(text=f"Semantic Concept Map — {ref}",
+                   font=dict(family="Georgia,serif", size=13, color=GOLD), x=.5),
+        plot_bgcolor=NAVY, paper_bgcolor=BIB_BLUE,
+        font=dict(family="monospace", color=CREAM),
+        xaxis=dict(visible=False), yaxis=dict(visible=False),
+        margin=dict(l=20, r=20, t=40, b=20), height=360, showlegend=True,
+        legend=dict(font=dict(color=CREAM, size=9), bgcolor="rgba(0,0,0,0)"))
+    return fig
+
+
+def build_mss_chart() -> "go.Figure":
+    rows = [(k, v) for k, v in MANUSCRIPT_DATA.items() if "all languages" not in k]
+    rows.sort(key=lambda x: x[1]["manuscripts"])
+    labels = [r[0] for r in rows]
+    vals   = [r[1]["manuscripts"] for r in rows]
+    cdata  = [(r[1]["earliest_copy"], r[1]["gap_years"]) for r in rows]
+    colors = [SCARLET if "New Testament" in r[0] else GOLD for r in rows]
+    fig = go.Figure(go.Bar(
+        y=labels, x=vals, orientation="h",
+        marker_color=colors, marker_line_color=NAVY, marker_line_width=1,
+        text=[f"{v:,}" for v in vals], textposition="outside",
+        textfont=dict(color=GOLD, size=10, family="monospace"),
+        hovertemplate="<b>%{y}</b><br>MSS: %{x:,}<br>Earliest: %{customdata[0]}<br>Gap: %{customdata[1]} yrs<extra></extra>",
+        customdata=cdata))
+    fig.update_layout(
+        title=dict(text="NT Manuscripts vs. Classical Antiquity",
+                   font=dict(family="Georgia,serif", size=14, color=GOLD), x=.5),
+        plot_bgcolor=NAVY, paper_bgcolor=BIB_BLUE,
+        font=dict(family="monospace", color=GOLD),
+        xaxis=dict(title="Extant Manuscripts", gridcolor="rgba(212,175,55,.07)", color=GOLD),
+        yaxis=dict(gridcolor="rgba(0,0,0,0)", color=GOLD),
+        margin=dict(l=10, r=70, t=42, b=32), height=310)
     return fig
 
 
 # ─────────────────────────────────────────────
-# SIDEBAR
+# RESOLVE KEYS  (outside sidebar — available to all tabs)
 # ─────────────────────────────────────────────
-
-with st.sidebar:
-    st.markdown(
-        '<div style="text-align:center;padding:1.2rem 0 0.5rem;">'
-        '<div style="font-size:1.8rem;margin-bottom:0.3rem;">✝️</div>'
-        '<div style="font-family:Georgia,serif;font-size:1.3rem;font-weight:600;color:#D4AF37;letter-spacing:0.05em;line-height:1.2;">Sententia Bible Lab</div>'
-        '<div style="font-size:0.58rem;color:#F5E17A;opacity:0.7;letter-spacing:0.2em;margin-top:0.3rem;">CHRISTIAN APOLOGETICS CODEX</div>'
-        '<div style="border-top:1px solid #D4AF37;margin:0.8rem 0 0.3rem;opacity:0.35;"></div>'
-        '</div>', unsafe_allow_html=True)
-
-    st.markdown('<div style="font-size:0.65rem;color:#F5E17A;opacity:0.8;letter-spacing:0.15em;margin-bottom:0.3rem;">📖 TRANSLATION</div>', unsafe_allow_html=True)
-    translation = st.selectbox("Translation", ["kjv","web","bbe"], index=0,
-                                label_visibility="collapsed",
-                                format_func=lambda x: {"kjv":"King James Version","web":"World English Bible","bbe":"Basic English"}[x])
-
-    api_key      = get_api_bible_key()
-    esv_key      = get_esv_key()
-    anthropic_key = get_anthropic_key()
-
-    # ESV status (independent of API.Bible)
-    if esv_key:
-        st.markdown('<div style="font-size:0.65rem;color:#D4AF37;letter-spacing:0.1em;margin:0.6rem 0 0.2rem;">✓ ESV ACTIVE</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(
-            '<div style="background:#0A1628;border:1px solid rgba(212,175,55,0.4);border-radius:3px;'
-            'padding:0.5rem 0.7rem;margin:0.5rem 0;font-size:0.7rem;color:#FFF8DC;line-height:1.7;">'
-            '<strong style="color:#D4AF37;">Add ESV</strong><br>'
-            'Add <code>ESV_API_KEY = "Token ..."</code> to <code>.streamlit/secrets.toml</code>'
-            '</div>', unsafe_allow_html=True)
-
-    # API.Bible status
-    if api_key:
-        st.markdown('<div style="font-size:0.65rem;color:#D4AF37;letter-spacing:0.1em;margin:0.3rem 0;">✓ API.BIBLE ACTIVE</div>', unsafe_allow_html=True)
-        premium_trans = st.selectbox("Premium", list(APIBIBLE_TRANSLATIONS.keys()), index=2,
-                                      label_visibility="collapsed")
-    else:
-        st.markdown(
-            '<div style="font-size:0.65rem;color:#F5E17A;opacity:0.5;margin:0.3rem 0 0.5rem;">'
-            'API.Bible pending — add <code>BIBLE_API_KEY</code> to secrets when approved.'
-            '</div>', unsafe_allow_html=True)
-        premium_trans = None
-
-    # AI status
-    if anthropic_key:
-        st.markdown('<div style="font-size:0.65rem;color:#D4AF37;letter-spacing:0.1em;margin:0.3rem 0;">✓ AI SCHOLAR ACTIVE</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div style="font-size:0.65rem;color:#F5E17A;opacity:0.5;margin:0.3rem 0;">Add <code>ANTHROPIC_API_KEY</code> to secrets to enable AI features.</div>', unsafe_allow_html=True)
-
-    st.markdown('<div style="border-top:1px solid #D4AF37;margin:0.8rem 0;opacity:0.2;"></div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size:0.65rem;color:#F5E17A;opacity:0.8;letter-spacing:0.15em;margin-bottom:0.5rem;">QUICK LOAD</div>', unsafe_allow_html=True)
-
-    QUICK_REFS = {
-        "John 3:16":         "The Gospel in miniature",
-        "John 1:1-18":       "The Johannine Prologue — Logos Christology",
-        "Romans 3:21-26":    "The heart of Pauline soteriology",
-        "Romans 8:28-39":    "The golden chain — providence and assurance",
-        "Isaiah 53:1-12":    "The Suffering Servant — Messianic prophecy",
-        "Philippians 2:5-11":"The Carmen Christi — kenōsis",
-        "Genesis 1:1-5":     "Creation ex nihilo",
-        "Psalm 22":          "The Messianic Psalm of dereliction",
-        "Daniel 7:13-14":    "The Son of Man pericope",
-        "Hebrews 11:1-6":    "The definition of faith",
-        "Exodus 3:14":       "The divine name — I AM",
-    }
-    for ref, desc in QUICK_REFS.items():
-        if st.button(ref, key=f"qr_{ref}", use_container_width=True, help=desc):
-            st.session_state.quick_load_ref = ref
-
-    st.markdown('<div style="border-top:1px solid #D4AF37;margin:0.8rem 0;opacity:0.2;"></div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size:0.58rem;color:#F5E17A;opacity:0.4;text-align:center;line-height:1.9;">Sola Scriptura · Soli Deo Gloria<br>Solus Christus · Sola Gratia · Sola Fide</div>', unsafe_allow_html=True)
-
-
-# ─────────────────────────────────────────────
-# HEADER
-# ─────────────────────────────────────────────
-
-st.markdown(
-    '<div style="text-align:center;padding:0.8rem 0 0.3rem;">'
-    '<div style="font-family:Georgia,serif;font-size:2.2rem;font-weight:600;color:#D4AF37;letter-spacing:0.04em;">Sententia Bible Lab</div>'
-    '<div style="font-family:IBM Plex Mono,monospace;font-size:0.66rem;color:#F5E17A;opacity:0.7;letter-spacing:0.22em;margin-top:0.25rem;">CHRISTIAN APOLOGETICS CODEX · GRADUATE RESEARCH WORKSTATION</div>'
-    '</div>', unsafe_allow_html=True)
-
-c1, c2, c3, c4 = st.columns(4)
-with c1: st.metric("Canonical Books", "66")
-with c2: st.metric("NT Manuscripts (Gk)", "5,856")
-with c3: st.metric("NT Manuscripts (all)", "25,000+")
-with c4: st.metric("Compositional Span", "~1,500 yrs")
-st.markdown('<hr/>', unsafe_allow_html=True)
-
-
-# Resolve keys outside sidebar scope for use in all tabs
 anthropic_key = get_anthropic_key()
 esv_key       = get_esv_key()
 api_key       = get_api_bible_key()
 
-# ─────────────────────────────────────────────
-# TABS
-# ─────────────────────────────────────────────
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "Scripture Lab",
-    "Commentary Engine",
-    "Apologetics",
-    "Research Prompts",
-    "Theological Debates",
-    "AI Scholar",
-])
+# ─────────────────────────────────────────────
+# SIDEBAR — NAVIGATION RAIL
+# ─────────────────────────────────────────────
+with st.sidebar:
+    # ── Wordmark ────────────────────────────────
+    st.markdown(
+        f'<div style="text-align:center;padding:1.1rem 0 .6rem">'
+        f'<div style="font-size:1.7rem;margin-bottom:.3rem;filter:drop-shadow(0 0 8px rgba(212,175,55,.3))">✝️</div>'
+        f'<div style="font-family:Playfair Display,Georgia,serif;font-size:1.08rem;'
+        f'font-weight:600;color:{GOLD};letter-spacing:.05em;line-height:1.2">'
+        f'Sententia<br>Bible Lab</div>'
+        f'<div style="font-size:.46rem;color:{LT_GOLD};opacity:.5;letter-spacing:.25em;'
+        f'margin-top:.3rem;text-transform:uppercase">Apologetics Codex</div>'
+        f'<div style="border-top:1px solid rgba(212,175,55,.18);margin:.75rem 0 .25rem"></div>'
+        f'</div>', unsafe_allow_html=True)
+
+    # ── Navigation Rail ──────────────────────────
+    st.markdown(
+        f'<div style="font-size:.5rem;color:{LT_GOLD};opacity:.5;'
+        f'letter-spacing:.22em;margin:.2rem 0 .4rem .3rem;text-transform:uppercase">'
+        f'Navigation</div>', unsafe_allow_html=True)
+
+    nav = st.radio(
+        "nav", [
+            "🏛️  Scholar's Desk",
+            "📊  Textual Mapping",
+            "⚙️  Lab Settings",
+        ],
+        label_visibility="collapsed",
+        key="nav_rail",
+    )
+
+    st.markdown(
+        f'<div style="border-top:1px solid rgba(212,175,55,.12);margin:.8rem 0 .6rem"></div>',
+        unsafe_allow_html=True)
+
+    # ── Translation Selector ─────────────────────
+    st.markdown(
+        f'<div style="font-size:.5rem;color:{LT_GOLD};opacity:.5;'
+        f'letter-spacing:.22em;margin-bottom:.4rem;text-transform:uppercase">'
+        f'Primary Translation</div>', unsafe_allow_html=True)
+    translation = st.selectbox(
+        "Translation", ["kjv", "web", "bbe"], index=0, label_visibility="collapsed",
+        format_func=lambda x: {"kjv": "KJV — King James",
+                                "web": "WEB — World English",
+                                "bbe": "BBE — Basic English"}[x])
+
+    # ── API Status Indicators ────────────────────
+    st.markdown(
+        f'<div style="border-top:1px solid rgba(212,175,55,.12);margin:.7rem 0 .5rem"></div>'
+        f'<div style="font-size:.5rem;color:{LT_GOLD};opacity:.5;'
+        f'letter-spacing:.22em;margin-bottom:.45rem;text-transform:uppercase">'
+        f'Active Services</div>', unsafe_allow_html=True)
+
+    for label, active, icon in [
+        ("AI Scholar",  bool(anthropic_key), "🤖"),
+        ("ESV API",     bool(esv_key),       "📖"),
+        ("API.Bible",   bool(api_key),       "🌐"),
+    ]:
+        dot_color = "#4caf50" if active else "#555"
+        txt_color = GOLD if active else "rgba(245,225,122,.28)"
+        status    = "Active" if active else "Add key to secrets"
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:.5rem;'
+            f'padding:.3rem .4rem;margin-bottom:.18rem;border-radius:4px;'
+            f'background:rgba({"212,175,55" if active else "0,0,0"},.04)">'
+            f'<div style="width:6px;height:6px;border-radius:50%;'
+            f'background:{dot_color};flex-shrink:0;'
+            f'box-shadow:{"0 0 4px #4caf50" if active else "none"}"></div>'
+            f'<div style="font-size:.62rem;color:{txt_color};'
+            f'font-family:IBM Plex Mono,monospace;letter-spacing:.04em">'
+            f'{icon} {label}</div>'
+            f'<div style="font-size:.52rem;color:rgba(245,225,122,.3);'
+            f'margin-left:auto;font-style:italic">{status if not active else ""}</div>'
+            f'</div>', unsafe_allow_html=True)
+
+    if api_key:
+        st.markdown(
+            f'<div style="font-size:.5rem;color:{LT_GOLD};opacity:.4;'
+            f'letter-spacing:.18em;margin:.5rem 0 .3rem;text-transform:uppercase">'
+            f'Premium Translation</div>', unsafe_allow_html=True)
+        premium_trans = st.selectbox(
+            "Premium Translation", list(APIBIBLE_TRANSLATIONS.keys()),
+            index=2, label_visibility="collapsed")
+    else:
+        premium_trans = None
+
+    # ── Quick Load ───────────────────────────────
+    st.markdown(
+        f'<div style="border-top:1px solid rgba(212,175,55,.12);margin:.8rem 0 .5rem"></div>'
+        f'<div style="font-size:.5rem;color:{LT_GOLD};opacity:.5;'
+        f'letter-spacing:.22em;margin-bottom:.45rem;text-transform:uppercase">'
+        f'Quick Load</div>', unsafe_allow_html=True)
+
+    QUICK = {
+        "John 3:16":          "Gospel in miniature",
+        "John 1:1-18":        "Johannine Prologue",
+        "Romans 3:21-26":     "Heart of Pauline soteriology",
+        "Romans 8:28-39":     "Golden chain of providence",
+        "Isaiah 53:1-12":     "Suffering Servant",
+        "Philippians 2:5-11": "Carmen Christi — kenōsis",
+        "Genesis 1:1-5":      "Creation ex nihilo",
+        "Psalm 22":           "Messianic dereliction",
+        "Daniel 7:13-14":     "Son of Man pericope",
+        "Hebrews 11:1-6":     "Definition of faith",
+        "Exodus 3:14":        "The divine name YHWH",
+    }
+    for ref, desc in QUICK.items():
+        if st.button(ref, key=f"qr_{ref}", use_container_width=True, help=desc):
+            st.session_state.quick_ref = ref
+            st.session_state.pop("ai_analysis", None)
+
+    # ── Footer ───────────────────────────────────
+    st.markdown(
+        f'<div style="border-top:1px solid rgba(212,175,55,.1);margin:.9rem 0 .4rem"></div>'
+        f'<div style="font-size:.44rem;color:{LT_GOLD};opacity:.25;text-align:center;'
+        f'line-height:2.2;letter-spacing:.1em">'
+        f'SOLA SCRIPTURA · SOLI DEO GLORIA<br>'
+        f'SOLUS CHRISTUS · SOLA GRATIA<br>SOLA FIDE</div>',
+        unsafe_allow_html=True)
+
+
+
+# ─────────────────────────────────────────────
+# PAGE HEADER — centered serif wordmark
+# ─────────────────────────────────────────────
+st.markdown(
+    f'<div style="text-align:center;padding:.4rem 0 .6rem">'
+    f'<div style="font-family:Playfair Display,Georgia,serif;font-size:2.1rem;'
+    f'font-weight:700;color:{GOLD};letter-spacing:.05em;'
+    f'text-shadow:0 0 40px rgba(212,175,55,.18);line-height:1.1">'
+    f'Sententia Bible Lab</div>'
+    f'<div style="font-family:EB Garamond,Georgia,serif;font-size:.88rem;'
+    f'color:{LT_GOLD};opacity:.55;letter-spacing:.35em;margin-top:.3rem;'
+    f'font-style:italic">Christian Apologetics Codex</div>'
+    f'<div style="width:60px;height:1px;background:linear-gradient('
+    f'90deg,transparent,{GOLD},transparent);margin:.5rem auto .3rem"></div>'
+    f'</div>', unsafe_allow_html=True)
+
+# ── Metrics strip ──
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Canonical Books",    "66")
+m2.metric("NT MSS (Greek)",     "5,856")
+m3.metric("NT MSS (all lang.)", "25,000+")
+m4.metric("Compositional Span", "~1,500 yrs")
+st.markdown("<hr/>", unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════
+# NAV RAIL ROUTER — render based on sidebar selection
+# ═══════════════════════════════════════════════════════
+active_nav = st.session_state.get("nav_rail", "🏛️  Scholar's Desk")
+
+
+# ────────────────────────────────────────────────────────
+# VIEW: TEXTUAL MAPPING
+# (moved above Scholar's Desk so it renders when selected)
+# ────────────────────────────────────────────────────────
+if active_nav == "📊  Textual Mapping":
+    st.markdown(
+        f'<div style="text-align:center;margin-bottom:1rem">'
+        f'<div style="font-family:Playfair Display,Georgia,serif;font-size:1.3rem;'
+        f'color:{GOLD};letter-spacing:.06em">Quantitative Textual Mapping</div>'
+        f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.5;letter-spacing:.18em;'
+        f'margin-top:.2rem;text-transform:uppercase">Semantic Graph · Lexical Frequency · Manuscript Attestation</div>'
+        f'</div>', unsafe_allow_html=True)
+
+    sdata = st.session_state.get("scripture_data", {})
+    sref  = st.session_state.get("scripture_ref", "")
+
+    if sdata.get("verses"):
+        vtxt_b = " ".join(v.get("text", "") for v in sdata["verses"])
+        h = _hash(vtxt_b + sref)
+        if st.session_state.get("graph_hash") != h:
+            st.session_state.graph_fig  = build_semantic_graph(vtxt_b, sref)
+            st.session_state.graph_hash = h
+        sec_head("Semantic Concept Map", sref)
+        st.plotly_chart(st.session_state.graph_fig, use_container_width=True)
+
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', vtxt_b.lower())
+        stop  = {"that","this","with","have","from","they","been","were","unto","thou",
+                 "thee","thine","hath","doth","shall","will","your","which","their",
+                 "there","when","what","also"}
+        freq = {}
+        for w in words:
+            if w not in stop:
+                freq[w] = freq.get(w, 0) + 1
+        if freq:
+            ornament()
+            sec_head("Lexical Frequency", "Top 15 substantive terms")
+            fdf = pd.DataFrame(
+                sorted(freq.items(), key=lambda x: -x[1])[:15],
+                columns=["Term", "Frequency"])
+            st.dataframe(fdf, hide_index=True, use_container_width=True)
+    else:
+        card(
+            f'<div style="font-size:.82rem;color:{CREAM};text-align:center;'
+            f'padding:.4rem 0">Load a passage in the Scripture Lab to generate the semantic map.</div>',
+            LT_GOLD)
+
+    ornament()
+    sec_head("NT Manuscript Attestation vs. Classical Antiquity")
+    st.plotly_chart(build_mss_chart(), use_container_width=True)
+
+
+# ────────────────────────────────────────────────────────
+# VIEW: LAB SETTINGS
+# ────────────────────────────────────────────────────────
+elif active_nav == "⚙️  Lab Settings":
+    st.markdown(
+        f'<div style="text-align:center;margin-bottom:1rem">'
+        f'<div style="font-family:Playfair Display,Georgia,serif;font-size:1.3rem;'
+        f'color:{GOLD};letter-spacing:.06em">Laboratory Settings</div>'
+        f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.5;letter-spacing:.18em;'
+        f'margin-top:.2rem;text-transform:uppercase">API Configuration · Commentary Series · Manuscript Data</div>'
+        f'</div>', unsafe_allow_html=True)
+
+    lc, rc = st.columns(2, gap="large")
+    with lc:
+        sec_head("API Configuration")
+        for label, active, key_hint, icon in [
+            ("Anthropic AI Scholar", bool(anthropic_key), "ANTHROPIC_API_KEY", "🤖"),
+            ("ESV Bible API",        bool(esv_key),       "ESV_API_KEY",       "📖"),
+            ("API.Bible Premium",    bool(api_key),       "BIBLE_API_KEY",     "🌐"),
+        ]:
+            status_color = "#4caf50" if active else SCARLET
+            status_text  = "Configured and active" if active else f"Add {key_hint} to Streamlit secrets"
+            st.markdown(
+                f'<div style="background:rgba(4,9,26,.6);border:1px solid rgba(212,175,55,.13);'
+                f'border-radius:5px;padding:.75rem 1rem;margin-bottom:.55rem;'
+                f'border-left:3px solid {status_color}">'
+                f'<div style="font-size:.78rem;color:{GOLD};margin-bottom:.2rem">{icon} {label}</div>'
+                f'<div style="font-size:.65rem;color:{"#4caf50" if active else LT_GOLD};'
+                f'opacity:{".9" if active else ".55"}">{status_text}</div>'
+                f'</div>', unsafe_allow_html=True)
+
+        sec_head("AI Model", "Current configuration")
+        st.markdown(
+            f'<div style="background:rgba(4,9,26,.6);border:1px solid rgba(212,175,55,.13);'
+            f'border-radius:5px;padding:.75rem 1rem">'
+            f'<div style="font-size:.72rem;color:{GOLD};margin-bottom:.35rem">claude-haiku-4-5-20251001</div>'
+            f'<div style="font-size:.62rem;color:{LT_GOLD};opacity:.55;line-height:1.7">'
+            f'Max tokens: 2,200 (analysis) · 1,900 (steelman) · 1,400 (chat)<br>'
+            f'Cache TTL: 86,400 seconds (24h)<br>'
+            f'Pattern: JSON-serialised messages → cached string hash</div>'
+            f'</div>', unsafe_allow_html=True)
+
+    with rc:
+        sec_head("Commentary Series Reference")
+        st.dataframe(pd.DataFrame([
+            {"Abbrev.": "AB",     "Series": "Anchor Bible",                         "Character": "Critical-historical; definitive philology"},
+            {"Abbrev.": "ICC",    "Series": "International Critical Commentary",    "Character": "Philologically rigorous; multi-author"},
+            {"Abbrev.": "NICNT",  "Series": "New International Commentary — NT",    "Character": "Evangelical; solid exegesis"},
+            {"Abbrev.": "NIGTC",  "Series": "New International Greek Testament Comm.","Character": "Greek text focus; advanced"},
+            {"Abbrev.": "WBC",    "Series": "Word Biblical Commentary",             "Character": "Mixed; includes textual notes"},
+            {"Abbrev.": "BECNT",  "Series": "Baker Exegetical Commentary",          "Character": "Evangelical; Greek text"},
+            {"Abbrev.": "Pillar", "Series": "Pillar NT Commentary (Carson)",        "Character": "Balanced; recommended"},
+            {"Abbrev.": "TOTC",   "Series": "Tyndale OT/NT Commentaries",          "Character": "Accessible evangelical introduction"},
+        ]), hide_index=True, use_container_width=True)
+
+        ornament()
+        sec_head("Manuscript Transmission Table")
+        st.dataframe(pd.DataFrame([
+            {"Document": "NT (Greek)",     "MSS": "5,856",  "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
+            {"Document": "NT (all lang.)", "MSS": "25,000+","Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
+            {"Document": "1QIsa-a (DSS)",  "MSS": "1",      "Earliest": "~125 BC",     "Gap": "~350 yrs"},
+            {"Document": "Iliad",          "MSS": "643",    "Earliest": "~400 BC",     "Gap": "400 yrs"},
+            {"Document": "Plato",          "MSS": "210",    "Earliest": "~895 AD",     "Gap": "1,200 yrs"},
+            {"Document": "Caesar",         "MSS": "251",    "Earliest": "~900 AD",     "Gap": "950 yrs"},
+        ]), hide_index=True, use_container_width=True)
+
+
+# ────────────────────────────────────────────────────────
+# VIEW: SCHOLAR'S DESK (default)
+# ────────────────────────────────────────────────────────
+else:
+
+    # ══════════════════════════════════════════════════
+    # COMMAND CENTER — Primary Inquiry
+    # ══════════════════════════════════════════════════
+    st.markdown('<div class="cmd-center">', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-family:Playfair Display,Georgia,serif;font-size:.95rem;'
+        f'font-weight:600;color:{GOLD};letter-spacing:.04em;margin-bottom:.25rem;text-align:center">'
+        f'Primary Inquiry</div>'
+        f'<div class="cmd-label" style="text-align:center">'
+        f'STATE YOUR RESEARCH QUESTION — AI SCHOLAR WILL RESPOND IN PARCHMENT VIEW</div>',
+        unsafe_allow_html=True)
+
+    inquiry = st.text_area(
+        "Primary Inquiry",
+        placeholder=(
+            "e.g. What is the exegetical case for penal substitution from Romans 3:25?  "
+            "How does μορφῇ θεοῦ in Phil 2:6 bear on the Christological debate?  "
+            "Present the Calvinist and Arminian readings of Romans 9:6–24 without selection bias."
+        ),
+        height=90, label_visibility="collapsed", key="primary_inquiry")
+
+    ic1, ic2, ic3 = st.columns([2, 2, 7])
+    with ic1:
+        submit_inq = st.button("⚡ Submit Inquiry", use_container_width=True,
+                               disabled=(not anthropic_key or not (inquiry or "").strip()))
+    with ic2:
+        clear_inq = st.button("✕ Clear Response", use_container_width=True)
+    with ic3:
+        if not anthropic_key:
+            st.markdown(
+                f'<div style="font-size:.65rem;color:{LT_GOLD};opacity:.42;padding-top:.5rem;'
+                f'font-style:italic">Add ANTHROPIC_API_KEY to Streamlit secrets to enable AI Scholar.</div>',
+                unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Handle inquiry ──
+    if clear_inq:
+        st.session_state.pop("inq_response", None)
+        st.session_state.pop("inq_text", None)
+
+    if submit_inq and (inquiry or "").strip() and anthropic_key:
+        sdata = st.session_state.get("scripture_data", {})
+        sref  = st.session_state.get("scripture_ref", "")
+        ptxt  = " ".join(v.get("text", "") for v in sdata.get("verses", []))
+        tlbl  = {"kjv": "KJV", "web": "WEB", "bbe": "BBE"}.get(translation, "KJV")
+        st.session_state.inq_response = ai_inquiry(inquiry.strip(), sref, ptxt, tlbl, anthropic_key)
+        st.session_state.inq_text     = inquiry.strip()
+
+    # ── Academic Split: Left metadata | Right parchment ──
+    if st.session_state.get("inq_response"):
+        left_col, right_col = st.columns([1, 2.5], gap="large")
+
+        with left_col:
+            st.markdown('<div class="meta-panel">', unsafe_allow_html=True)
+            sec_head("Research Metadata")
+            inq_txt = st.session_state.get("inq_text", "")
+            st.markdown(
+                f'<div class="meta-lbl">Inquiry</div>'
+                f'<div class="meta-val">{inq_txt[:180]}{"…" if len(inq_txt)>180 else ""}</div>',
+                unsafe_allow_html=True)
+            ctx_ref = st.session_state.get("scripture_ref", "None loaded")
+            st.markdown(
+                f'<div class="meta-lbl">Passage Context</div>'
+                f'<div class="meta-val">{ctx_ref}</div>', unsafe_allow_html=True)
+            tname = {"kjv": "King James Version", "web": "World English Bible",
+                     "bbe": "Basic English Bible"}.get(translation, "KJV")
+            st.markdown(
+                f'<div class="meta-lbl">Translation</div>'
+                f'<div class="meta-val">{tname}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="meta-lbl">AI Model</div>'
+                f'<div class="meta-val">Claude Haiku · 24h Cache</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="meta-lbl">Hermeneutic</div>'
+                f'<div class="meta-val">Hist.-grammatical · Reformed evangelical · NA28/BHS</div>',
+                unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with right_col:
+            sec_head("Scholarly Insight", "AI Scholar Response — Parchment View")
+            parchment(st.session_state.inq_response)
+
+        st.markdown("<hr/>", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════
+    # SIX SCHOLARLY TABS
+    # ══════════════════════════════════════════════════
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📖  Scripture Lab",
+        "🏛  Commentary Engine",
+        "⚔  Apologetics",
+        "📋  Research Prompts",
+        "⚖  Theological Debates",
+        "🤖  AI Scholar",
+    ])
+
 
 
 # ══════════════════════════════════════════════
 # TAB 1 — SCRIPTURE LAB
 # ══════════════════════════════════════════════
 with tab1:
-    if "quick_load_ref" in st.session_state:
-        ref_default = st.session_state.pop("quick_load_ref")
-    else:
-        ref_default = st.session_state.get("scripture_ref", "John 3:16")
-
-    col_ref, col_btn = st.columns([5, 1])
-    with col_ref:
-        ref_input = st.text_input("Reference", value=ref_default,
-                                   placeholder="e.g. Romans 8:28-39, Isaiah 53, Psalm 22",
+    # Reference input
+    default_ref = st.session_state.pop("quick_ref", None) or st.session_state.get("scripture_ref", "John 3:16")
+    rc, bc = st.columns([5, 1])
+    with rc:
+        ref_input = st.text_input("Reference", value=default_ref,
+                                   placeholder="e.g. Romans 8:28-39",
                                    label_visibility="collapsed")
-    with col_btn:
+    with bc:
         fetch_btn = st.button("FETCH", use_container_width=True)
 
-    if "scripture_data" not in st.session_state or fetch_btn or ref_input != st.session_state.get("scripture_ref"):
+    if fetch_btn or ref_input != st.session_state.get("scripture_ref"):
         if ref_input:
-            with st.spinner("Fetching passage..."):
+            with st.spinner("Fetching…"):
                 st.session_state.scripture_data = fetch_scripture(ref_input, translation)
                 st.session_state.scripture_ref  = ref_input
+                st.session_state.pop("ai_analysis", None)
 
     sdata = st.session_state.get("scripture_data", {})
     sref  = st.session_state.get("scripture_ref", ref_input)
 
     if sdata.get("fallback"):
-        st.markdown('<div style="font-size:0.7rem;color:#B22222;margin-bottom:0.5rem;">⚠ API unavailable — showing hardcoded KJV fallback text.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:.67rem;color:{SCARLET};margin-bottom:.35rem">'
+                    f'⚠ API unavailable — hardcoded KJV fallback active.</div>',
+                    unsafe_allow_html=True)
 
-    col_text, col_right = st.columns([1, 1], gap="large")
+    # Two-column layout: text left, interlinear/lexical right
+    text_col, right_col = st.columns([1, 1], gap="large")
 
-    with col_text:
-        section_header("Scripture Text", sref)
+    with text_col:
+        sec_head("Scripture Text", sref)
         if sdata.get("error") and not sdata.get("verses"):
-            card('<span style="color:#B22222;">⚠ ' + sdata["error"] + '</span>', "#B22222")
+            card(f'<span style="color:{SCARLET}">⚠ {sdata["error"]}</span>', SCARLET)
         elif sdata.get("verses"):
-            verses = sdata["verses"]
-            trans_name = sdata.get("translation_name", translation.upper())
+            tname = sdata.get("translation_name", translation.upper())
             st.markdown(
-                '<div style="font-size:0.63rem;color:#F5E17A;opacity:0.7;letter-spacing:0.12em;margin-bottom:0.5rem;">'
-                + sref.upper() + ' · ' + trans_name.upper() + '</div>', unsafe_allow_html=True)
-            verse_html = ""
-            for v in verses:
-                num  = v.get("verse", "")
-                text = v.get("text", "").strip()
-                verse_html += (
-                    '<span style="color:#B22222;font-weight:600;font-size:0.7rem;margin-right:4px;">[' + str(num) + ']</span>'
-                    '<span style="color:#FFF8DC;">' + text + '</span> '
-                )
+                f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.62;'
+                f'letter-spacing:.12em;margin-bottom:.35rem">{sref.upper()} · {tname.upper()}</div>',
+                unsafe_allow_html=True)
+            vhtml = "".join(
+                f'<span style="color:{SCARLET};font-weight:600;font-size:.67rem;margin-right:3px">[{v.get("verse","")}]</span>'
+                f'<span style="color:{CREAM}">{v.get("text","").strip()}</span> '
+                for v in sdata["verses"])
             st.markdown(
-                '<div style="font-family:IBM Plex Mono,monospace;font-size:0.88rem;line-height:2.1;'
-                'color:#FFF8DC;background:#0A1628;border-left:3px solid #D4AF37;'
-                'padding:1rem 1.2rem;border-radius:3px;border:1px solid rgba(212,175,55,0.2);">'
-                + verse_html + '</div>', unsafe_allow_html=True)
+                f'<div style="font-family:IBM Plex Mono,monospace;font-size:.86rem;line-height:2.05;'
+                f'color:{CREAM};background:{NAVY};border-left:3px solid {GOLD};'
+                f'padding:.95rem 1.15rem;border-radius:3px;border:1px solid rgba(212,175,55,.16)">'
+                f'{vhtml}</div>', unsafe_allow_html=True)
 
         # AI Passage Analyst
         if sdata.get("verses"):
-            st.markdown('<hr/>', unsafe_allow_html=True)
-            section_header("AI Passage Analysis")
-            col_ai_btn, col_ai_note = st.columns([2, 5])
-            with col_ai_btn:
-                analyse_btn = st.button("⚡ ANALYSE PASSAGE", key="analyse_btn",
-                                        use_container_width=True,
-                                        disabled=not anthropic_key)
-            with col_ai_note:
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("AI Passage Analysis")
+            ab, nb = st.columns([2, 5])
+            with ab:
+                analyse = st.button("⚡ ANALYSE PASSAGE", key="analyse_btn",
+                                    use_container_width=True, disabled=not anthropic_key)
+            with nb:
                 if not anthropic_key:
-                    st.markdown('<div style="font-size:0.72rem;color:#F5E17A;opacity:0.5;padding-top:0.5rem;">Add ANTHROPIC_API_KEY to secrets to enable.</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div style="font-size:0.72rem;color:#F5E17A;opacity:0.6;padding-top:0.5rem;">Generates full exegetical analysis for any passage — context, key terms, scholarly commentary, cross-references, apologetics interface.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.42;'
+                                f'padding-top:.45rem">Add ANTHROPIC_API_KEY to enable.</div>',
+                                unsafe_allow_html=True)
+            if analyse:
+                vtxt  = " ".join(v.get("text", "").strip() for v in sdata["verses"])
+                tlbl  = {"kjv": "KJV", "web": "WEB", "bbe": "BBE"}.get(translation, "KJV")
+                result = ai_analyse_passage(sref, vtxt, tlbl, anthropic_key)
+                st.session_state.ai_analysis     = result
+                st.session_state.ai_analysis_ref = sref
 
-            if analyse_btn and anthropic_key and sdata.get("verses"):
-                verse_text = " ".join(v.get("text","").strip() for v in sdata["verses"])
-                with st.spinner("Generating analysis — this takes 10–20 seconds..."):
-                    analysis = ai_analyse_passage(sref, verse_text, anthropic_key)
-                st.session_state["ai_analysis"] = analysis
-                st.session_state["ai_analysis_ref"] = sref
-
-            if st.session_state.get("ai_analysis") and st.session_state.get("ai_analysis_ref") == sref:
-                st.markdown(
-                    '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
-                    'border-radius:4px;padding:1.2rem 1.4rem;margin-top:0.5rem;'
-                    'font-size:0.86rem;color:#FFF8DC;line-height:1.95;white-space:pre-wrap;">'
-                    + st.session_state["ai_analysis"].replace("<", "&lt;").replace(">", "&gt;")
-                    + '</div>', unsafe_allow_html=True)
+            if (st.session_state.get("ai_analysis")
+                    and st.session_state.get("ai_analysis_ref") == sref):
+                parchment(st.session_state.ai_analysis)
 
         # Parallel translations
-        st.markdown('<hr/>', unsafe_allow_html=True)
-        section_header("Parallel Translations")
-
-        # ESV — dedicated panel
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Parallel Translations")
         if esv_key:
             with st.expander("English Standard Version (ESV)", expanded=True):
-                with st.spinner("Loading ESV..."):
-                    esv_data = fetch_esv(sref, esv_key)
-                if esv_data.get("verses"):
-                    esv_text = " ".join(
-                        '<span style="color:#B22222;font-weight:600;font-size:0.7rem;margin-right:3px;">[' +
-                        str(v.get("verse","")) + ']</span>' + v.get("text","").strip()
-                        for v in esv_data["verses"]
-                    )
-                    st.markdown(
-                        '<div style="font-family:IBM Plex Mono,monospace;font-size:0.87rem;'
-                        'line-height:2.1;color:#FFF8DC;">' + esv_text + '</div>',
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown('<div style="font-size:0.78rem;color:#B22222;">' +
-                                esv_data.get("error","ESV unavailable") + '</div>',
+                edata = fetch_esv(sref, esv_key)
+                if edata.get("verses"):
+                    ehtml = " ".join(
+                        f'<span style="color:{SCARLET};font-weight:600;font-size:.67rem;margin-right:3px">[{v.get("verse","")}]</span>'
+                        + v.get("text", "").strip()
+                        for v in edata["verses"])
+                    st.markdown(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.95">{ehtml}</div>',
                                 unsafe_allow_html=True)
-
+                else:
+                    st.markdown(f'<div style="font-size:.75rem;color:{SCARLET}">{edata.get("error","")}</div>',
+                                unsafe_allow_html=True)
         for alt in ["kjv", "web", "bbe"]:
             if alt != translation:
-                label = {"kjv":"King James Version","web":"World English Bible","bbe":"Basic English"}[alt]
-                with st.expander(label):
-                    with st.spinner(f"Loading {label}..."):
-                        alt_data = fetch_scripture(sref, alt)
-                    if alt_data.get("verses"):
-                        alt_text = " ".join(v.get("text","").strip() for v in alt_data["verses"])
-                        st.markdown('<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.9;">' + alt_text + '</div>', unsafe_allow_html=True)
-
-        # API.Bible premium translations
+                lbl = {"kjv": "King James Version", "web": "World English Bible",
+                       "bbe": "Basic English Bible"}[alt]
+                with st.expander(lbl):
+                    ad = fetch_scripture(sref, alt)
+                    if ad.get("verses"):
+                        st.markdown(
+                            f'<div style="font-size:.84rem;color:{CREAM};line-height:1.9">'
+                            + " ".join(v.get("text","") for v in ad["verses"]) + '</div>',
+                            unsafe_allow_html=True)
         if api_key and premium_trans:
             with st.expander(f"{premium_trans} (API.Bible)"):
-                with st.spinner(f"Loading {premium_trans}..."):
-                    bid = APIBIBLE_TRANSLATIONS[premium_trans]
-                    prem_data = fetch_apibible(sref, bid, api_key)
-                if prem_data.get("verses"):
-                    prem_text = " ".join(v.get("text","") for v in prem_data["verses"])
-                    st.markdown('<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.9;">' + prem_text + '</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div style="font-size:0.78rem;color:#F5E17A;opacity:0.6;">Unable to load ' + premium_trans + ' — check API key and reference format.</div>', unsafe_allow_html=True)
+                pd_data = fetch_apibible(sref, APIBIBLE_TRANSLATIONS[premium_trans], api_key)
+                if pd_data.get("verses"):
+                    st.markdown(
+                        f'<div style="font-size:.84rem;color:{CREAM};line-height:1.9">'
+                        + " ".join(v.get("text","") for v in pd_data["verses"]) + '</div>',
+                        unsafe_allow_html=True)
 
-    with col_right:
-        # Interlinear
-        section_header("Interlinear Analysis")
-        interlinear_key = next((k for k in INTERLINEAR if k.lower().replace(" ","") in sref.lower().replace(" ","")), None)
-        if interlinear_key:
-            st.markdown('<div style="font-size:0.68rem;color:#F5E17A;opacity:0.7;margin-bottom:0.6rem;">Word-by-word Greek/Hebrew with Strong\'s numbers.</div>', unsafe_allow_html=True)
-            for eng, gk, strongs, gloss in INTERLINEAR[interlinear_key]:
+    with right_col:
+        sec_head("Interlinear Analysis")
+        ikey = next((k for k in INTERLINEAR
+                     if k.lower().replace(" ", "") in sref.lower().replace(" ", "")), None)
+        if ikey:
+            st.markdown(
+                f'<div style="font-size:.65rem;color:{LT_GOLD};opacity:.62;margin-bottom:.45rem">'
+                f'Word-by-word · Strong\'s numbers</div>', unsafe_allow_html=True)
+            for eng, gk, snum, gloss in INTERLINEAR[ikey]:
                 st.markdown(
-                    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;'
-                    'border-bottom:1px solid rgba(212,175,55,0.12);padding:0.4rem 0;">'
-                    '<div>'
-                    '<div style="font-size:0.72rem;color:#FFF8DC;font-weight:500;">' + eng + '</div>'
-                    '<div style="font-size:1.1rem;color:#D4AF37;margin-top:0.1rem;">' + gk + '</div>'
-                    '</div>'
-                    '<div>'
-                    '<div style="font-size:0.62rem;color:#F5E17A;opacity:0.75;font-family:monospace;">' + strongs + '</div>'
-                    '<div style="font-size:0.72rem;color:#FFF8DC;opacity:0.85;line-height:1.5;margin-top:0.1rem;">' + gloss + '</div>'
-                    '</div>'
-                    '</div>', unsafe_allow_html=True)
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.25rem;'
+                    f'border-bottom:1px solid rgba(212,175,55,.09);padding:.3rem 0">'
+                    f'<div><div style="font-size:.68rem;color:{CREAM};font-weight:500">{eng}</div>'
+                    f'<div style="font-size:1.08rem;color:{GOLD};margin-top:.04rem">{gk}</div></div>'
+                    f'<div><div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;font-family:monospace">{snum}</div>'
+                    f'<div style="font-size:.68rem;color:{CREAM};opacity:.8;line-height:1.45;margin-top:.04rem">{gloss}</div></div>'
+                    f'</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div style="font-size:0.78rem;color:#F5E17A;opacity:0.6;">Interlinear data available for: ' + ', '.join(INTERLINEAR.keys()) + '.</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:.74rem;color:{LT_GOLD};opacity:.45">'
+                f'Interlinear data available for: {", ".join(INTERLINEAR.keys())}.</div>',
+                unsafe_allow_html=True)
 
-        st.markdown('<hr/>', unsafe_allow_html=True)
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Lexical Analysis — Strong's Index")
+        vtxt_full = " ".join(v.get("text", "") for v in sdata.get("verses", []))
+        matched_lex = [(k, v) for k, v in STRONGS_LEXICON.items()
+                       if k in vtxt_full.lower() or v["tr"].lower() in vtxt_full.lower()][:5]
+        if not matched_lex:
+            matched_lex = list(STRONGS_LEXICON.items())[:3]
+        for term, entry in matched_lex:
+            lc = GOLD if entry["lang"] == "Greek" else SCARLET
+            st.markdown(
+                f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.17);'
+                f'border-left:3px solid {lc};border-radius:3px;padding:.6rem .85rem;margin-bottom:.4rem">'
+                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;letter-spacing:.1em">'
+                f'{entry["num"]} · {entry["tr"]} · {entry["lang"]}</div>'
+                f'<div style="font-size:1.18rem;color:{CREAM};margin:.08rem 0">{entry["gk"]}</div>'
+                f'<div style="font-size:.73rem;color:{LT_GOLD};line-height:1.6">{entry["def"]}</div>'
+                f'</div>', unsafe_allow_html=True)
 
-        # Lexical Analysis
-        section_header("Lexical Analysis // Strong's")
-        text_lower = (" ".join(v.get("text","") for v in sdata.get("verses",[])) + " " + sref).lower()
-        matched = [(k,v) for k,v in STRONGS_LEXICON.items()
-                   if k in text_lower or v["tr"].lower() in text_lower][:5]
-        if matched:
-            for term, entry in matched:
-                lang_color = "#D4AF37" if entry["lang"] == "Greek" else "#B22222"
+    # ── Technical Basement ───────────────────────────────────────────────────
+    if sdata.get("verses"):
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        with st.expander("📊  Quantitative Textual Mapping — Semantic Graph & Lexical Frequency"):
+            vtxt_b = " ".join(v.get("text", "") for v in sdata["verses"])
+            h = _hash(vtxt_b + sref)
+            if st.session_state.get("graph_hash") != h:
+                st.session_state.graph_fig  = build_semantic_graph(vtxt_b, sref)
+                st.session_state.graph_hash = h
+            st.markdown(
+                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45;'
+                f'text-align:center;letter-spacing:.12em;margin-bottom:.6rem">'
+                f'PASSAGE → LEXICAL TERMS → DOCTRINAL DOMAINS · '
+                f'Full analysis available in the Textual Mapping view</div>',
+                unsafe_allow_html=True)
+            st.plotly_chart(st.session_state.graph_fig, use_container_width=True)
+
+            words = re.findall(r'\b[a-zA-Z]{4,}\b', vtxt_b.lower())
+            stop  = {"that","this","with","have","from","they","been","were","unto","thou",
+                     "thee","thine","hath","doth","shall","will","your","which","their",
+                     "there","when","what","also"}
+            freq = {}
+            for w in words:
+                if w not in stop:
+                    freq[w] = freq.get(w, 0) + 1
+            if freq:
+                fdf = pd.DataFrame(
+                    sorted(freq.items(), key=lambda x: -x[1])[:15],
+                    columns=["Term", "Frequency"])
                 st.markdown(
-                    '<div style="background:#0A1628;border:1px solid rgba(212,175,55,0.25);'
-                    'border-left:3px solid ' + lang_color + ';border-radius:3px;'
-                    'padding:0.7rem 1rem;margin-bottom:0.5rem;">'
-                    '<div style="font-size:0.62rem;color:#F5E17A;opacity:0.75;letter-spacing:0.1em;">'
-                    + entry["num"] + ' · ' + entry["tr"] + ' · ' + entry["lang"] + '</div>'
-                    '<div style="font-size:1.25rem;color:#FFF8DC;margin:0.15rem 0;">' + entry["gk"] + '</div>'
-                    '<div style="font-size:0.77rem;color:#F5E17A;line-height:1.7;">' + entry["def"] + '</div>'
-                    '</div>', unsafe_allow_html=True)
-        else:
-            # Show first 3 lexicon entries as reference
-            for term, entry in list(STRONGS_LEXICON.items())[:3]:
-                st.markdown(
-                    '<div style="border-bottom:1px solid rgba(212,175,55,0.1);padding:0.4rem 0;">'
-                    '<span style="font-size:0.68rem;color:#D4AF37;font-family:monospace;">' + entry["num"] + '</span>'
-                    '<span style="font-size:0.9rem;color:#FFF8DC;margin:0 0.5rem;">' + entry["gk"] + '</span>'
-                    '<span style="font-size:0.7rem;color:#F5E17A;opacity:0.8;">' + entry["tr"] + '</span>'
-                    '</div>', unsafe_allow_html=True)
-            st.markdown('<div style="font-size:0.72rem;color:#F5E17A;opacity:0.55;margin-top:0.4rem;">Load a passage containing tracked terms for full lexical activation.</div>', unsafe_allow_html=True)
+                    f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.55;'
+                    f'margin:.5rem 0 .3rem;letter-spacing:.1em;text-align:center">'
+                    f'TOP 15 SUBSTANTIVE TERMS</div>', unsafe_allow_html=True)
+                st.dataframe(fdf, hide_index=True, use_container_width=True)
+
 
 
 # ══════════════════════════════════════════════
 # TAB 2 — COMMENTARY ENGINE
 # ══════════════════════════════════════════════
 with tab2:
-    section_header("Commentary Engine", "Analytical summaries of primary scholarly sources")
+    sec_head("Commentary Engine", "Analytical summaries of primary scholarly sources")
     st.markdown(
-        '<div style="font-size:0.72rem;color:#F5E17A;opacity:0.7;margin-bottom:0.8rem;line-height:1.7;">'
-        'All commentary entries are <strong>analytical summaries</strong> of the cited scholarly works, not direct quotations. '
-        'Consult the primary sources (listed with page references) for the original arguments.'
-        '</div>', unsafe_allow_html=True)
+        f'<div style="font-size:.7rem;color:{LT_GOLD};opacity:.62;margin-bottom:.6rem;line-height:1.65">'
+        f'All commentary entries are <strong>analytical summaries</strong> of the cited scholarly works, '
+        f'not direct quotations. Consult primary sources for original arguments.</div>',
+        unsafe_allow_html=True)
 
-    passage_select = st.selectbox("Passage", list(COMMENTARY.keys()), label_visibility="collapsed")
-    cdata = COMMENTARY[passage_select]
+    psg = st.selectbox("Passage", list(COMMENTARY.keys()), label_visibility="collapsed")
+    cd  = COMMENTARY[psg]
 
-    col_btn, _ = st.columns([2, 5])
-    with col_btn:
-        if st.button(f"↗ Load in Scripture Lab", key="load_commentary"):
-            st.session_state.scripture_data = fetch_scripture(passage_select, translation)
-            st.session_state.scripture_ref  = passage_select
+    if st.button("↗ Load in Scripture Lab", key="load_comm"):
+        st.session_state.scripture_data = fetch_scripture(psg, translation)
+        st.session_state.scripture_ref  = psg
 
-    st.markdown('<hr/>', unsafe_allow_html=True)
+    st.markdown("<hr/>", unsafe_allow_html=True)
+    sec_head(cd["label"], "Historical & Literary Context")
+    card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["context"]}</div>')
 
-    section_header(cdata["label"], "Historical & Literary Context")
-    card('<div style="font-size:0.87rem;color:#FFF8DC;line-height:1.88;">' + cdata["context"] + '</div>')
+    sec_head("Scholarly Commentary")
+    for s in cd["scholars"]:
+        scholar_card(s["author"], s["work"], s["text"])
 
-    section_header("Scholarly Commentary")
-    for sch in cdata["scholars"]:
-        scholar_card(sch["author"], sch["work"], sch["text"])
-
-    col_lex, col_xref = st.columns(2, gap="large")
-    with col_lex:
-        section_header("Lexical Notes // Greek & Hebrew")
-        for strongs_num, term, transliteration, definition in cdata["greek"]:
+    lc, xc = st.columns(2, gap="large")
+    with lc:
+        sec_head("Lexical Notes — Greek & Hebrew")
+        for snum, term, tr, defn in cd["greek"]:
             st.markdown(
-                '<div style="background:#0A1628;border:1px solid rgba(212,175,55,0.2);'
-                'border-radius:3px;padding:0.75rem 1rem;margin-bottom:0.6rem;">'
-                '<div style="font-size:0.62rem;color:#F5E17A;opacity:0.75;letter-spacing:0.1em;">' + strongs_num + ' · ' + transliteration + '</div>'
-                '<div style="font-size:1.35rem;color:#FFF8DC;margin:0.15rem 0;">' + term + '</div>'
-                '<div style="font-size:0.78rem;color:#F5E17A;line-height:1.7;">' + definition + '</div>'
-                '</div>', unsafe_allow_html=True)
-
-    with col_xref:
-        section_header("Cross-References // TSK")
-        for ref_str, note in cdata["cross_refs"]:
+                f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.16);'
+                f'border-radius:3px;padding:.65rem .85rem;margin-bottom:.45rem">'
+                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;letter-spacing:.1em">{snum} · {tr}</div>'
+                f'<div style="font-size:1.28rem;color:{CREAM};margin:.08rem 0">{term}</div>'
+                f'<div style="font-size:.75rem;color:{LT_GOLD};line-height:1.62">{defn}</div>'
+                f'</div>', unsafe_allow_html=True)
+    with xc:
+        sec_head("Cross-References — TSK")
+        for rstr, note in cd["cross_refs"]:
             st.markdown(
-                '<div style="border-bottom:1px solid rgba(212,175,55,0.1);padding:0.5rem 0;">'
-                '<div style="display:flex;gap:0.7rem;align-items:baseline;">'
-                '<span style="background:#66023C;color:#D4AF37;font-size:0.66rem;padding:2px 8px;'
-                'border-radius:2px;white-space:nowrap;border:1px solid rgba(212,175,55,0.35);">' + ref_str + '</span>'
-                '<span style="font-size:0.78rem;color:#F5E17A;opacity:0.85;">' + note + '</span>'
-                '</div></div>', unsafe_allow_html=True)
+                f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.42rem 0">'
+                f'<span class="xref-badge">{rstr}</span>'
+                f'<span style="font-size:.74rem;color:{LT_GOLD};opacity:.8;margin-left:.4rem">{note}</span>'
+                f'</div>', unsafe_allow_html=True)
 
-    st.markdown('<hr/>', unsafe_allow_html=True)
-    section_header("Historical Background & Sitz im Leben")
-    card('<div style="font-size:0.87rem;color:#FFF8DC;line-height:1.88;">' + cdata["historical"] + '</div>', "#66023C")
+    st.markdown("<hr/>", unsafe_allow_html=True)
+    sec_head("Historical Background")
+    card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["historical"]}</div>', PURPLE)
+    sec_head("Apologetics Interface")
+    card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["apologetics"]}</div>', SCARLET)
 
-    section_header("Apologetics Interface")
-    card('<div style="font-size:0.87rem;color:#FFF8DC;line-height:1.88;">' + cdata["apologetics"] + '</div>', "#B22222")
-
-    st.markdown('<hr/>', unsafe_allow_html=True)
-    section_header("Church Fathers // Patristic Witness")
-    for father in CHURCH_FATHERS:
-        with st.expander(father["name"] + " (" + father["dates"] + ") — " + father["role"]):
+    st.markdown("<hr/>", unsafe_allow_html=True)
+    sec_head("Church Fathers — Patristic Witness")
+    for f_ in CHURCH_FATHERS:
+        with st.expander(f"{f_['name']} ({f_['dates']}) — {f_['role']}"):
             st.markdown(
-                '<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.85;margin-bottom:0.5rem;">'
-                + father["contribution"] + '</div>'
-                '<div style="font-size:0.68rem;color:#D4AF37;font-style:italic;">Key work: ' + father["key_work"] + '</div>',
-                unsafe_allow_html=True)
+                f'<div style="font-size:.82rem;color:{CREAM};line-height:1.85;margin-bottom:.35rem">'
+                f'{f_["contribution"]}</div>'
+                f'<div style="font-size:.65rem;color:{GOLD};font-style:italic">'
+                f'Key work: {f_["key_work"]}</div>', unsafe_allow_html=True)
 
-    st.markdown('<hr/>', unsafe_allow_html=True)
-    section_header("Lexical Distribution // Full Strong's Index")
+    st.markdown("<hr/>", unsafe_allow_html=True)
+    sec_head("Full Strong's Index")
     lex_rows = [{"Term": k, "Strong's": v["num"], "Transliteration": v["tr"],
-                 "Language": v["lang"], "Definition": v["def"][:80] + "…"}
+                 "Language": v["lang"], "Definition": v["def"][:78] + "…"}
                 for k, v in STRONGS_LEXICON.items()]
-    st.dataframe(pd.DataFrame(lex_rows), hide_index=True, use_container_width=True,
-                 column_config={
-                     "Term":           st.column_config.TextColumn("TERM",            width=100),
-                     "Strong's":       st.column_config.TextColumn("STRONG'S",        width=80),
-                     "Transliteration":st.column_config.TextColumn("TRANSLITERATION", width=120),
-                     "Language":       st.column_config.TextColumn("LANG",             width=65),
-                     "Definition":     st.column_config.TextColumn("DEFINITION"),
-                 })
+    st.dataframe(pd.DataFrame(lex_rows), hide_index=True, use_container_width=True)
 
 
 # ══════════════════════════════════════════════
 # TAB 3 — APOLOGETICS
 # ══════════════════════════════════════════════
 with tab3:
-    col_args, col_hist = st.columns([3, 2], gap="large")
-
-    with col_args:
-        section_header("Apologetics Arguments", "Eight core arguments with objections and responses")
+    ac, hc = st.columns([3, 2], gap="large")
+    with ac:
+        sec_head("Eight Core Arguments", "With primary objections and responses")
         for arg in APOLOGETICS_ARGS:
-            type_color = {"Metaphysical":"#66023C","Scientific/Metaphysical":"#0038A8",
-                          "Philosophical":"#66023C","Historical":"#B22222",
-                          "Prophetic/Historical":"#B22222","Defensive Apologetics":"#0A1628"}.get(arg["type"], "#0A1628")
-            with st.expander(arg["title"] + "  [" + arg["type"] + "]"):
-                st.markdown('<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.9;">' + arg["content"] + '</div>',
+            with st.expander(f"{arg['title']}  [{arg['type']}]"):
+                st.markdown(f'<div style="font-size:.82rem;color:{CREAM};line-height:1.88">{arg["content"]}</div>',
                             unsafe_allow_html=True)
-
-        st.markdown('<hr/>', unsafe_allow_html=True)
-        section_header("Recommended Bibliography")
-        biblio = [
-            ("William Lane Craig", "Reasonable Faith, 3rd ed. (2008)", "Kalam, resurrection, moral argument — the standard evangelical apologetics text"),
-            ("Alvin Plantinga", "Warranted Christian Belief (2000)", "Epistemological grounding of religious belief — Aquinas/Calvin model"),
-            ("Alvin Plantinga", "The Nature of Necessity (1974)", "Modal ontological argument in full formal presentation"),
-            ("Robin Collins", "The Well-Tempered Universe (2009)", "Fine-tuning argument — the most rigorous scientific treatment"),
-            ("Victor Reppert", "C.S. Lewis's Dangerous Idea (2003)", "Argument from Reason — full philosophical development"),
-            ("J.P. Moreland", "Consciousness and the Existence of God (2008)", "Argument from consciousness — Routledge monograph"),
-            ("N.T. Wright", "The Resurrection of the Son of God (2003)", "Historical resurrection — 800-page critical scholarship"),
-            ("Gary Habermas & Michael Licona", "The Case for the Resurrection of Jesus (2004)", "Minimal facts method with scholarly apparatus"),
-            ("F.F. Bruce", "The New Testament Documents: Are They Reliable? (6th ed., 1981)", "Bibliographical test — accessible and rigorous"),
-            ("John Lennox", "God's Undertaker: Has Science Buried God? (2009)", "Science and theism — Oxford mathematician"),
-            ("Gleason Archer", "Encyclopedia of Bible Difficulties (1982)", "Systematic treatment of apparent contradictions"),
-            ("Paul Copan & William Lane Craig (eds.)", "Come Let Us Reason (2012)", "Formal logic for Christian apologetics"),
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Recommended Bibliography")
+        BIBLIO = [
+            ("Craig, William Lane", "Reasonable Faith, 3rd ed. (2008)", "Kalam, resurrection, moral argument"),
+            ("Plantinga, Alvin", "Warranted Christian Belief (2000)", "Reformed epistemology"),
+            ("Plantinga, Alvin", "The Nature of Necessity (1974)", "Modal ontological argument"),
+            ("Collins, Robin", "The Well-Tempered Universe (2009)", "Fine-tuning argument"),
+            ("Reppert, Victor", "C.S. Lewis's Dangerous Idea (2003)", "Argument from Reason"),
+            ("Moreland, J.P.", "Consciousness and the Existence of God (2008)", "Argument from consciousness"),
+            ("Wright, N.T.", "The Resurrection of the Son of God (2003)", "Historical resurrection"),
+            ("Habermas & Licona", "The Case for the Resurrection (2004)", "Minimal facts method"),
+            ("Bruce, F.F.", "The NT Documents: Are They Reliable? (1981)", "Bibliographical test"),
+            ("Lennox, John", "God's Undertaker: Has Science Buried God? (2009)", "Science/theism"),
         ]
-        for author, work, note in biblio:
+        for auth, work, note in BIBLIO:
             st.markdown(
-                '<div style="border-bottom:1px solid rgba(212,175,55,0.1);padding:0.5rem 0;">'
-                '<div style="font-size:0.77rem;color:#D4AF37;">' + author + '</div>'
-                '<div style="font-size:0.72rem;color:#FFF8DC;font-style:italic;">' + work + '</div>'
-                '<div style="font-size:0.67rem;color:#F5E17A;opacity:0.7;margin-top:0.1rem;">' + note + '</div>'
-                '</div>', unsafe_allow_html=True)
+                f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.42rem 0">'
+                f'<div style="font-size:.73rem;color:{GOLD}">{auth}</div>'
+                f'<div style="font-size:.68rem;color:{CREAM};font-style:italic">{work}</div>'
+                f'<div style="font-size:.63rem;color:{LT_GOLD};opacity:.62;margin-top:.04rem">{note}</div>'
+                f'</div>', unsafe_allow_html=True)
 
-    with col_hist:
-        section_header("Bibliographical Test", "NT manuscript evidence vs. classical antiquity")
-        st.plotly_chart(build_manuscript_chart(), use_container_width=True)
-
-        section_header("Textual Transmission Table")
-        trans_rows = [
-            {"Document": "NT (Greek)", "MSS": "5,856", "Earliest": "P52 (~AD 125)", "Gap": "25 yrs"},
-            {"Document": "NT (all lang.)", "MSS": "25,000+", "Earliest": "P52 (~AD 125)", "Gap": "25 yrs"},
-            {"Document": "DSS Isaiah", "MSS": "1QIsa-a", "Earliest": "~125 BC", "Gap": "350 yrs"},
-            {"Document": "LXX", "MSS": "500+", "Earliest": "~250 BC", "Gap": "N/A"},
+    with hc:
+        sec_head("Bibliographical Test")
+        st.plotly_chart(build_mss_chart(), use_container_width=True)
+        sec_head("Textual Transmission Table")
+        st.dataframe(pd.DataFrame([
+            {"Document": "NT (Greek)", "MSS": "5,856", "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
+            {"Document": "NT (all lang.)", "MSS": "25,000+", "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
+            {"Document": "DSS (1QIsa-a)", "MSS": "1", "Earliest": "~125 BC", "Gap": "~350 yrs"},
             {"Document": "Iliad", "MSS": "643", "Earliest": "~400 BC", "Gap": "400 yrs"},
             {"Document": "Plato", "MSS": "210", "Earliest": "~895 AD", "Gap": "1,200 yrs"},
             {"Document": "Caesar", "MSS": "251", "Earliest": "~900 AD", "Gap": "950 yrs"},
-        ]
-        st.dataframe(pd.DataFrame(trans_rows), hide_index=True, use_container_width=True)
+        ]), hide_index=True, use_container_width=True)
 
-        st.markdown('<hr/>', unsafe_allow_html=True)
-        section_header("Archaeological Confirmation")
-        arch = [
-            ("Pilate Inscription (1961)", "Caesarea Maritima", "Pontius Pilate as prefect of Judea"),
-            ("Pool of Siloam (2004)", "Jerusalem", "John 9:7 — healing of the blind man"),
-            ("Caiaphas Ossuary (1990)", "Jerusalem", "High priest of the Passion narratives"),
-            ("Tel Dan Stele (9th c. BC)", "Dan, Israel", "Extra-biblical 'House of David' attestation"),
-            ("Dead Sea Scrolls (1947)", "Qumran caves", "OT textual stability; 1QIsa-a predates Christ"),
-            ("House of Peter", "Capernaum", "Mark 1:29 — continuous veneration from 1st c."),
-            ("Ebla Tablets (1974)", "Tell Mardikh, Syria", "Patriarchal names, Canaanite culture"),
-        ]
-        for disc, loc, conf in arch:
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Archaeological Confirmation")
+        for disc, conf in [
+            ("Pilate Inscription (1961)",   "Pontius Pilate as prefect of Judea"),
+            ("Pool of Siloam (2004)",        "John 9:7 — healing of the blind man"),
+            ("Caiaphas Ossuary (1990)",      "High priest of the Passion narratives"),
+            ("Tel Dan Stele (9th c. BC)",    "'House of David' — extra-biblical attestation"),
+            ("Dead Sea Scrolls (1947)",      "OT textual stability; 1QIsa-a predates Christ"),
+            ("House of Peter, Capernaum",   "Mark 1:29 — 1st-century veneration continuous"),
+        ]:
             st.markdown(
-                '<div style="border-bottom:1px solid rgba(212,175,55,0.1);padding:0.45rem 0;">'
-                '<div style="font-size:0.74rem;color:#D4AF37;">' + disc + '</div>'
-                '<div style="font-size:0.68rem;color:#FFF8DC;opacity:0.85;">' + loc + ' — ' + conf + '</div>'
-                '</div>', unsafe_allow_html=True)
-
-        st.markdown('<hr/>', unsafe_allow_html=True)
-        section_header("History of Apologetics")
-        apo_hist = [
-            ("Justin Martyr", "c. 155 AD", "First systematic defense before imperial Rome"),
-            ("Irenaeus", "c. 180 AD", "Anti-Gnostic; canon and apostolic succession"),
-            ("Origen", "c. 248 AD", "Contra Celsum — first comprehensive philosophical refutation"),
-            ("Augustine", "413–426 AD", "City of God — theology of history and culture"),
-            ("Anselm", "1077 AD", "Proslogion — Ontological Argument"),
-            ("Aquinas", "1259–1274 AD", "Summa Contra Gentiles — Five Ways"),
-            ("Butler", "1736 AD", "Analogy of Religion — evidentialist method"),
-            ("Paley", "1802 AD", "Natural Theology — design argument"),
-            ("Lewis", "1952 AD", "Mere Christianity — popular apologetics apex"),
-            ("Plantinga", "1974 AD", "Modal ontological argument; reformed epistemology"),
-            ("Craig", "1979–", "Kalam revival; minimal facts resurrection method"),
-        ]
-        for name, date, desc in apo_hist:
-            st.markdown(
-                '<div style="display:flex;gap:0.6rem;border-bottom:1px solid rgba(212,175,55,0.08);padding:0.35rem 0;">'
-                '<span style="font-size:0.63rem;color:#D4AF37;white-space:nowrap;min-width:70px;">' + date + '</span>'
-                '<span style="font-size:0.72rem;color:#FFF8DC;">' + name + ' — ' + desc + '</span>'
-                '</div>', unsafe_allow_html=True)
+                f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.38rem 0">'
+                f'<div style="font-size:.7rem;color:{GOLD}">{disc}</div>'
+                f'<div style="font-size:.65rem;color:{CREAM};opacity:.8">{conf}</div>'
+                f'</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════
 # TAB 4 — RESEARCH PROMPTS
 # ══════════════════════════════════════════════
 with tab4:
-    section_header("Research Prompts", "Graduate-level inquiry questions across five domains")
-    st.markdown(
-        '<div style="font-size:0.82rem;color:#F5E17A;opacity:0.8;line-height:1.8;margin-bottom:1rem;">'
-        'Each prompt requires engagement with primary sources, original languages, and scholarly secondary literature. '
-        'They are not designed to be answered quickly.'
-        '</div>', unsafe_allow_html=True)
-
-    cat = st.selectbox("Category", list(STUDY_PROMPTS.keys()), label_visibility="collapsed",
-                       format_func=lambda x: {
-                           "Exegetical":"📖 Exegetical",
-                           "Doctrinal":"🏛️ Doctrinal",
-                           "Historical":"⏳ Historical",
-                           "Apologetics":"⚔️ Apologetics",
-                           "Theological Debates":"⚖️ Theological Debates",
-                       }[x])
-
-    cat_descs = {
-        "Exegetical":         "Greek and Hebrew grammatical analysis, word studies, and textual-critical disputes.",
+    sec_head("Research Prompts", "Graduate-level inquiry across five domains")
+    CAT_META = {
+        "Exegetical":         "📖 Exegetical",
+        "Doctrinal":          "🏛 Doctrinal",
+        "Historical":         "⏳ Historical",
+        "Apologetics":        "⚔ Apologetics",
+        "Theological Debates":"⚖ Theological Debates",
+    }
+    CAT_DESC = {
+        "Exegetical":         "Greek/Hebrew word studies, grammatical analysis, textual-critical disputes.",
         "Doctrinal":          "Systematic theology — the great loci of Christian doctrine examined through Scripture and tradition.",
-        "Historical":         "Canon, textual transmission, archaeology, and the history of interpretation.",
+        "Historical":         "Canon formation, textual transmission, archaeology, and history of interpretation.",
         "Apologetics":        "Philosophical and evidential questions — the intellectual defense of Christian truth claims.",
         "Theological Debates":"Live internal debates within evangelical scholarship, presented without editorial advocacy.",
     }
-    st.markdown('<div style="font-size:0.71rem;color:#F5E17A;opacity:0.6;margin-bottom:1rem;">' + cat_descs[cat] + '</div>', unsafe_allow_html=True)
-
+    cat = st.selectbox("Category", list(STUDY_PROMPTS.keys()),
+                       label_visibility="collapsed",
+                       format_func=lambda x: CAT_META[x])
+    st.markdown(f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.52;margin-bottom:.8rem">{CAT_DESC[cat]}</div>',
+                unsafe_allow_html=True)
     for i, prompt in enumerate(STUDY_PROMPTS[cat], 1):
-        st.markdown(
-            '<div style="background:#0A1628;border:1px solid rgba(212,175,55,0.18);'
-            'border-left:3px solid #D4AF37;border-radius:3px;'
-            'padding:0.9rem 1.1rem;margin-bottom:0.65rem;">'
-            '<div style="font-size:0.58rem;color:#F5E17A;opacity:0.45;letter-spacing:0.12em;margin-bottom:0.3rem;">'
-            + cat.upper() + ' ' + f'{i:02d}' + '</div>'
-            '<div style="font-size:0.87rem;color:#FFF8DC;line-height:1.82;">' + prompt + '</div>'
-            '</div>', unsafe_allow_html=True)
+        pc, bc = st.columns([8, 2])
+        with pc:
+            st.markdown(
+                f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.14);'
+                f'border-left:3px solid {GOLD};border-radius:3px;padding:.75rem .95rem;margin-bottom:.45rem">'
+                f'<div style="font-size:.56rem;color:{LT_GOLD};opacity:.38;letter-spacing:.12em;margin-bottom:.22rem">'
+                f'{cat.upper()} {i:02d}</div>'
+                f'<div style="font-size:.84rem;color:{CREAM};line-height:1.78">{prompt}</div>'
+                f'</div>', unsafe_allow_html=True)
+        with bc:
+            if st.button("Send to AI", key=f"p_{cat}_{i}",
+                         use_container_width=True, disabled=not anthropic_key):
+                st.session_state.inq_response = ai_single(prompt, anthropic_key, 2200)
+                st.session_state.inq_text     = prompt
+                st.rerun()
 
-    st.markdown('<hr/>', unsafe_allow_html=True)
-    section_header("Study Methodology")
-    methodology = [
-        ("1. Exegesis before Eisegesis",
-         "Begin with the text itself — the original Hebrew (OT) or Greek (NT). Identify the grammatical form of key verbs (tense, voice, mood), the syntactic structure, and the immediate literary context before consulting secondary sources. Resources: Blass-Debrunner-Funk <em>Greek Grammar of the NT</em>; Kittel-Hoffer-Wright <em>Biblical Hebrew: A Text and Workbook</em>; Moulton-Howard-Turner <em>Grammar of NT Greek</em>."),
-        ("2. Historical-Grammatical Method",
-         "Determine the author's intended meaning within the original historical and cultural context. Consult the Sitz im Leben: Who wrote it? To whom? Under what circumstances? What was the rhetorical purpose? The meaning of a text cannot exceed what its original author could have intended to communicate to his original audience."),
-        ("3. Biblical-Theological Analysis",
-         "Locate the passage within the broader redemptive-historical narrative (Geerhardus Vos, <em>Biblical Theology</em>; D.A. Carson, <em>New Testament Biblical Theology</em>). What earlier texts does this passage develop, fulfill, or allude to? How does it contribute to the progressive unfolding of the divine economy?"),
-        ("4. Engage the Tradition",
-         "Consult the patristic commentaries (ANF and NPNF series), the Reformers (Calvin's <em>Commentaries</em>, Luther's <em>Works</em>), and contemporary critical scholarship (ICC, NICNT, NIGTC, WBC, BECNT, Pillar series). Theologically responsible exegesis is always communal — it takes place in dialogue with the 2,000-year interpretive tradition."),
-        ("5. Apologetics Integration",
-         "Where relevant, connect textual findings to the broader apologetic project. Does this passage bear on the evidential question? Does it advance or complicate the theological claims being defended? Resources: Craig's <em>Reasonable Faith</em>; Plantinga's <em>Warranted Christian Belief</em>; Habermas & Licona's <em>Case for the Resurrection</em>."),
-    ]
-    for title, content in methodology:
-        with st.expander(title):
-            st.markdown('<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.9;">' + content + '</div>',
-                        unsafe_allow_html=True)
-
-    st.markdown('<hr/>', unsafe_allow_html=True)
-    section_header("Commentary Series Reference")
-    series_rows = [
-        ("ICC",   "International Critical Commentary",      "Philologically rigorous; critical-historical; multi-author"),
-        ("NICNT", "New International Commentary — NT",      "Evangelical; solid exegesis; accessible prose"),
-        ("NICOT", "New International Commentary — OT",      "Evangelical; historical-grammatical; thorough"),
-        ("NIGTC", "New International Greek Testament Commentary", "Greek text focus; advanced; definitive for many books"),
-        ("WBC",   "Word Biblical Commentary",               "Mixed evangelical/critical; format includes textual notes"),
-        ("BECNT", "Baker Exegetical Commentary",            "Evangelical; Greek text; intermediate-advanced level"),
-        ("Pillar","Pillar NT Commentary",                   "D.A. Carson series; evangelical; balanced scholarship"),
-        ("AB",    "Anchor Bible",                           "Critical-historical; often definitive philological analysis"),
-        ("TOTC",  "Tyndale OT/NT Commentaries",             "Accessible evangelical introduction series"),
-        ("NIVSB", "NIV Study Bible / ESV Study Bible",      "Entry-level reference; useful for overview"),
-    ]
-    st.dataframe(pd.DataFrame(series_rows, columns=["Abbrev.", "Full Name", "Character"]),
-                 hide_index=True, use_container_width=True)
+    st.markdown("<hr/>", unsafe_allow_html=True)
+    sec_head("Commentary Series Reference")
+    st.dataframe(pd.DataFrame([
+        {"Abbrev.": "ICC",    "Series": "International Critical Commentary",   "Character": "Philologically rigorous; multi-author"},
+        {"Abbrev.": "NICNT",  "Series": "New International Commentary — NT",   "Character": "Evangelical; solid exegesis"},
+        {"Abbrev.": "NIGTC",  "Series": "New International Greek Testament Commentary", "Character": "Greek text focus; advanced"},
+        {"Abbrev.": "WBC",    "Series": "Word Biblical Commentary",            "Character": "Mixed; includes textual notes"},
+        {"Abbrev.": "BECNT",  "Series": "Baker Exegetical Commentary",         "Character": "Evangelical; Greek text"},
+        {"Abbrev.": "Pillar", "Series": "Pillar NT Commentary (Carson)",       "Character": "Balanced; recommended"},
+        {"Abbrev.": "AB",     "Series": "Anchor Bible",                        "Character": "Critical-historical; definitive philology"},
+        {"Abbrev.": "TOTC",   "Series": "Tyndale OT/NT Commentaries",         "Character": "Accessible evangelical introduction"},
+    ]), hide_index=True, use_container_width=True)
 
 
 # ══════════════════════════════════════════════
 # TAB 5 — THEOLOGICAL DEBATES
 # ══════════════════════════════════════════════
 with tab5:
-    section_header("Theological Debates", "Live internal debates within evangelical scholarship — presented without editorial advocacy")
+    sec_head("Theological Debates", "Live internal debates — no editorial advocacy")
     st.markdown(
-        '<div style="font-size:0.8rem;color:#F5E17A;opacity:0.75;line-height:1.8;margin-bottom:1rem;">'
-        'Each debate is presented with the strongest arguments for each position drawn from their primary advocates. '
-        'No editorial position is taken. The goal is to equip the researcher to engage these questions with full awareness of the exegetical and theological terrain.'
-        '</div>', unsafe_allow_html=True)
+        f'<div style="font-size:.76rem;color:{LT_GOLD};opacity:.68;line-height:1.75;margin-bottom:.7rem">'
+        f'Each debate presents the strongest arguments for each position from primary advocates. '
+        f'No editorial position is taken.</div>', unsafe_allow_html=True)
 
     DEBATES = {
         "Calvinism vs. Arminianism — Election & Perseverance": {
@@ -1795,158 +2473,115 @@ with tab5:
     for debate_title, debate_data in DEBATES.items():
         with st.expander(debate_title):
             keys = [k for k in debate_data if k != "key_texts"]
-
-            # Key texts
             if "key_texts" in debate_data:
                 refs_html = " ".join(
-                    '<span style="background:#66023C;color:#D4AF37;font-size:0.66rem;padding:2px 8px;'
-                    'border-radius:2px;border:1px solid rgba(212,175,55,0.3);margin:2px;display:inline-block;">'
-                    + r + '</span>' for r in debate_data["key_texts"]
-                )
-                st.markdown('<div style="margin-bottom:0.8rem;"><strong style="font-size:0.68rem;color:#F5E17A;opacity:0.7;letter-spacing:0.1em;">KEY TEXTS:</strong> ' + refs_html + '</div>', unsafe_allow_html=True)
-
-            # Render each position
+                    f'<span class="xref-badge">{r}</span>' for r in debate_data["key_texts"])
+                st.markdown(
+                    f'<div style="margin-bottom:.65rem">'
+                    f'<strong style="font-size:.63rem;color:{LT_GOLD};opacity:.62;letter-spacing:.1em">KEY TEXTS: </strong>'
+                    f'{refs_html}</div>', unsafe_allow_html=True)
             for key in keys:
                 pos = debate_data[key]
                 st.markdown(
-                    '<div style="background:#0A1628;border:1px solid rgba(212,175,55,0.2);'
-                    'border-left:4px solid #D4AF37;border-radius:3px;padding:1rem 1.2rem;margin-bottom:0.5rem;">'
-                    '<div style="font-family:Georgia,serif;font-size:0.95rem;font-weight:600;color:#D4AF37;margin-bottom:0.2rem;">' + pos["label"] + '</div>'
-                    '<div style="font-size:0.65rem;color:#F5E17A;opacity:0.7;margin-bottom:0.6rem;font-style:italic;">Advocates: ' + pos["advocates"] + '</div>'
-                    '<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.9;">' + pos["argument"] + '</div>'
-                    '</div>', unsafe_allow_html=True)
-
-                # Steelman button
-                steelman_key = f"steelman_{debate_title}_{key}"
-                result_key   = f"steelman_result_{debate_title}_{key}"
-                btn_col, note_col = st.columns([2, 5])
-                with btn_col:
-                    if st.button("⚡ STEELMAN THIS", key=steelman_key,
-                                 use_container_width=True,
-                                 disabled=not anthropic_key):
-                        with st.spinner("Constructing strongest version of this argument..."):
-                            result = ai_steelman(
-                                debate_title,
-                                pos["label"],
-                                pos["argument"],
-                                debate_data.get("key_texts", []),
-                                anthropic_key,
-                            )
-                        st.session_state[result_key] = result
-                with note_col:
+                    f'<div class="scholar-card">'
+                    f'<div style="font-family:Georgia,serif;font-size:.91rem;font-weight:600;color:{GOLD};margin-bottom:.12rem">{pos["label"]}</div>'
+                    f'<div style="font-size:.61rem;color:{LT_GOLD};opacity:.62;margin-bottom:.45rem;font-style:italic">Advocates: {pos["advocates"]}</div>'
+                    f'<div style="font-size:.82rem;color:{CREAM};line-height:1.88">{pos["argument"]}</div>'
+                    f'</div>', unsafe_allow_html=True)
+                sk = f"sm_{debate_title}_{key}"
+                rk = f"sm_r_{debate_title}_{key}"
+                bc, nc = st.columns([2, 5])
+                with bc:
+                    if st.button("⚡ STEELMAN THIS", key=sk,
+                                 use_container_width=True, disabled=not anthropic_key):
+                        st.session_state[rk] = ai_steelman(
+                            debate_title, pos["label"], pos["argument"],
+                            debate_data.get("key_texts", []), anthropic_key)
+                with nc:
                     if not anthropic_key:
-                        st.markdown('<div style="font-size:0.68rem;color:#F5E17A;opacity:0.4;padding-top:0.4rem;">Add ANTHROPIC_API_KEY to enable.</div>', unsafe_allow_html=True)
-
-                if st.session_state.get(result_key):
+                        st.markdown(
+                            f'<div style="font-size:.64rem;color:{LT_GOLD};opacity:.38;padding-top:.38rem">'
+                            f'Add ANTHROPIC_API_KEY to enable.</div>', unsafe_allow_html=True)
+                if st.session_state.get(rk):
                     st.markdown(
-                        '<div style="background:#0A1628;border:1px solid #B22222;border-left:4px solid #B22222;'
-                        'border-radius:3px;padding:1rem 1.2rem;margin-bottom:1rem;'
-                        'font-size:0.84rem;color:#FFF8DC;line-height:1.95;white-space:pre-wrap;">'
-                        '<div style="font-size:0.6rem;color:#B22222;letter-spacing:0.12em;margin-bottom:0.5rem;">AI STEELMAN — ' + pos["label"].upper() + '</div>'
-                        + st.session_state[result_key].replace("<","&lt;").replace(">","&gt;")
-                        + '</div>', unsafe_allow_html=True)
-                    if st.button("✕ Clear", key=f"clear_{steelman_key}"):
-                        del st.session_state[result_key]
+                        f'<div style="margin-bottom:.35rem;font-size:.58rem;color:{SCARLET};letter-spacing:.12em">'
+                        f'AI STEELMAN — {pos["label"].upper()}</div>', unsafe_allow_html=True)
+                    parchment(st.session_state[rk])
+                    if st.button("✕ Clear", key=f"cl_{sk}"):
+                        del st.session_state[rk]
 
 
 # ══════════════════════════════════════════════
-# TAB 6 — AI SCHOLAR
+# TAB 6 — AI SCHOLAR  (persistent chat)
 # ══════════════════════════════════════════════
 with tab6:
-    section_header("AI Scholar", "Graduate-level biblical research assistant")
-
+    sec_head("AI Scholar", "Graduate-level biblical research — persistent conversation")
     if not anthropic_key:
         card(
-            '<div style="font-size:0.86rem;color:#FFF8DC;line-height:1.8;">'
-            '<strong style="color:#D4AF37;">API key not configured.</strong><br>'
-            'Add <code>ANTHROPIC_API_KEY = "sk-ant-..."</code> to your Streamlit secrets '
-            '(Dashboard → Settings → Secrets) and reboot the app.'
-            '</div>', "#B22222")
+            f'<div style="font-size:.83rem;color:{CREAM};line-height:1.78">'
+            f'<strong style="color:{GOLD}">API key not configured.</strong><br>'
+            f'Add <code>ANTHROPIC_API_KEY = "sk-ant-..."</code> to Streamlit secrets '
+            f'(Dashboard → Settings → Secrets).</div>', SCARLET)
     else:
         st.markdown(
-            '<div style="font-size:0.8rem;color:#F5E17A;opacity:0.75;line-height:1.8;margin-bottom:0.8rem;">'
-            'Ask any question in biblical studies, exegesis, systematic theology, church history, or apologetics. '
-            'The AI Scholar operates within a rigorous evangelical scholarly framework — citing commentators, '
-            'flagging interpretive disputes, and working with original languages.'
-            '</div>', unsafe_allow_html=True)
+            f'<div style="font-size:.76rem;color:{LT_GOLD};opacity:.68;line-height:1.75;margin-bottom:.65rem">'
+            f'Persistent conversation with the AI Scholar. Context maintained across turns. '
+            f'All responses render in parchment view.</div>', unsafe_allow_html=True)
 
-        # Initialize chat history
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
 
-        # Quick prompt buttons
-        section_header("Quick Prompts")
-        quick_prompts = [
+        sec_head("Quick Prompts")
+        QP = [
             "What is the exegetical case for penal substitutionary atonement from Romans 3:21–26?",
             "Explain Plantinga's modal ontological argument and the strongest objection to it.",
             "What does μορφῇ θεοῦ in Philippians 2:6 mean and why does it matter for Christology?",
-            "Summarise the Calvinism/Arminianism debate on Romans 9 — what is the strongest exegetical argument on each side?",
+            "Summarise the Calvinism/Arminianism debate on Romans 9 — strongest exegetical arguments on each side.",
             "What is the historical case for the resurrection using only the minimal facts method?",
             "How do the Dead Sea Scrolls bear on the reliability of the Old Testament text?",
             "What is the difference between propitiation and expiation in Romans 3:25?",
             "Explain the fine-tuning argument and the multiverse objection to it.",
         ]
-        cols = st.columns(2)
-        for i, qp in enumerate(quick_prompts):
-            with cols[i % 2]:
-                if st.button(qp[:65] + ("…" if len(qp) > 65 else ""),
+        qc1, qc2 = st.columns(2)
+        for i, qp in enumerate(QP):
+            with (qc1 if i % 2 == 0 else qc2):
+                if st.button(qp[:66] + ("…" if len(qp) > 66 else ""),
                              key=f"qp_{i}", use_container_width=True):
                     st.session_state.chat_history.append({"role": "user", "content": qp})
-                    with st.spinner("Thinking..."):
-                        reply = ai_chat(st.session_state.chat_history, anthropic_key)
+                    reply = ai(st.session_state.chat_history, anthropic_key)
                     st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                    st.rerun()
 
-        st.markdown('<hr/>', unsafe_allow_html=True)
-        section_header("Conversation")
-
-        # Render chat history
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Conversation")
         for msg in st.session_state.chat_history:
             if msg["role"] == "user":
                 st.markdown(
-                    '<div style="background:#0038A8;border-radius:4px;padding:0.7rem 1rem;'
-                    'margin-bottom:0.5rem;font-size:0.85rem;color:#FFF8DC;line-height:1.8;">'
-                    '<span style="font-size:0.6rem;color:#F5E17A;opacity:0.7;letter-spacing:0.1em;">YOU</span><br>'
-                    + msg["content"].replace("<","&lt;").replace(">","&gt;")
-                    + '</div>', unsafe_allow_html=True)
+                    f'<div style="background:{BIB_BLUE};border-radius:4px;padding:.62rem .88rem;'
+                    f'margin-bottom:.38rem;font-size:.82rem;color:{CREAM};line-height:1.72">'
+                    f'<span style="font-size:.56rem;color:{LT_GOLD};opacity:.62;letter-spacing:.1em">YOU</span><br>'
+                    f'{msg["content"]}</div>', unsafe_allow_html=True)
             else:
-                st.markdown(
-                    '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
-                    'border-radius:4px;padding:0.9rem 1.1rem;margin-bottom:0.8rem;'
-                    'font-size:0.85rem;color:#FFF8DC;line-height:1.95;white-space:pre-wrap;">'
-                    '<span style="font-size:0.6rem;color:#D4AF37;letter-spacing:0.1em;">AI SCHOLAR</span><br><br>'
-                    + msg["content"].replace("<","&lt;").replace(">","&gt;")
-                    + '</div>', unsafe_allow_html=True)
+                parchment(msg["content"])
 
-        # Input box
-        user_input = st.text_input(
-            "Ask a question",
-            placeholder="e.g. What does ἱλαστήριον mean in Romans 3:25 and how does it bear on the atonement debate?",
-            label_visibility="collapsed",
-            key="chat_input",
-        )
-        send_col, clear_col = st.columns([2, 1])
-        with send_col:
-            send_btn = st.button("SEND", use_container_width=True, key="send_btn")
-        with clear_col:
-            clear_btn = st.button("CLEAR CONVERSATION", use_container_width=True, key="clear_chat")
+        user_in = st.text_input(
+            "Ask", label_visibility="collapsed", key="chat_in",
+            placeholder="e.g. What does ἱλαστήριον mean in Romans 3:25 and how does it bear on the atonement debate?")
+        sc, cc = st.columns([2, 1])
+        with sc:
+            if st.button("SEND", use_container_width=True, key="send_btn") and user_in.strip():
+                st.session_state.chat_history.append({"role": "user", "content": user_in.strip()})
+                reply = ai(st.session_state.chat_history, anthropic_key)
+                st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                st.rerun()
+        with cc:
+            if st.button("CLEAR CONVERSATION", use_container_width=True, key="clear_chat"):
+                st.session_state.chat_history = []
+                st.rerun()
 
-        if send_btn and user_input.strip():
-            st.session_state.chat_history.append({"role": "user", "content": user_input.strip()})
-            with st.spinner("Thinking..."):
-                reply = ai_chat(st.session_state.chat_history, anthropic_key)
-            st.session_state.chat_history.append({"role": "assistant", "content": reply})
-            st.rerun()
-
-        if clear_btn:
-            st.session_state.chat_history = []
-            st.rerun()
-
-        # Token usage estimate
         if st.session_state.chat_history:
-            total_chars = sum(len(m["content"]) for m in st.session_state.chat_history)
-            est_tokens  = total_chars // 4
+            tc = sum(len(m["content"]) for m in st.session_state.chat_history)
             st.markdown(
-                f'<div style="font-size:0.62rem;color:#F5E17A;opacity:0.35;margin-top:0.5rem;">'
-                f'Estimated tokens in conversation: ~{est_tokens:,} · '
-                f'Messages: {len(st.session_state.chat_history)}'
-                f'</div>', unsafe_allow_html=True)
+                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.28;margin-top:.38rem">'
+                f'~{tc//4:,} tokens in conversation · {len(st.session_state.chat_history)} messages</div>',
+                unsafe_allow_html=True)
