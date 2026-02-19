@@ -157,37 +157,42 @@ hr {{ border-color: rgba(212,175,55,0.133) !important; margin: 1.2rem 0 !importa
 # ─────────────────────────────────────────────
 
 def section_header(title: str, sub: str = ""):
-    sub_html = f'<div style="font-size:0.68rem;color:rgba(245,225,122,0.533);letter-spacing:0.08em;margin-top:0.15rem;">{sub}</div>' if sub else ""
-    st.markdown(f'''
-        <div style="margin:1.2rem 0 0.7rem;">
-            <div style="font-family:\'Playfair Display\',Georgia,serif;
-                        font-size:1.1rem;font-weight:600;color:{PURE_GOLD};
-                        letter-spacing:0.04em;line-height:1.2;">{title}</div>
-            {sub_html}
-            <div style="height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.4),rgba(212,175,55,0));margin-top:0.4rem;"></div>
-        </div>''', unsafe_allow_html=True)
+    sub_part = (
+        '<div style="font-size:0.67rem;color:#F5E17A;opacity:0.75;'
+        'letter-spacing:0.08em;margin-top:0.1rem;margin-bottom:0.2rem;">'
+        + sub + '</div>'
+    ) if sub else ""
+    html = (
+        '<div style="margin:1.2rem 0 0.6rem;padding-bottom:0.5rem;'
+        'border-bottom:1px solid #D4AF37;">'
+        '<div style="font-family:Georgia,serif;font-size:1.05rem;'
+        'font-weight:600;color:#D4AF37;letter-spacing:0.04em;line-height:1.2;">'
+        + title + '</div>' + sub_part + '</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 def card(html: str, accent: str = PURE_GOLD):
-    st.markdown(f'''
-        <div style="background:{NAVY};border:1px solid {accent}33;border-left:3px solid {accent};
-                    border-radius:4px;padding:1rem 1.25rem;margin-bottom:0.9rem;
-                    box-shadow:0 2px 12px rgba(0,0,0,0.4);">{html}</div>''',
-        unsafe_allow_html=True)
+    bg = "#0A1628"
+    html_out = (
+        '<div style="background:' + bg + ';border:1px solid ' + accent +
+        ';border-left:3px solid ' + accent + ';opacity:0.95;'
+        'border-radius:4px;padding:1rem 1.25rem;margin-bottom:0.9rem;">'
+        + html + '</div>'
+    )
+    st.markdown(html_out, unsafe_allow_html=True)
 
 def quote_card(text: str, attribution: str, ref: str = ""):
-    ref_html = f'<span style="color:rgba(245,225,122,0.467);font-size:0.72rem;"> — {ref}</span>' if ref else ""
-    st.markdown(f'''
-        <div style="background:linear-gradient(135deg,{NAVY},rgba(0,56,168,0.267));
-                    border:1px solid rgba(212,175,55,0.267);border-left:4px solid {PURE_GOLD};
-                    border-radius:4px;padding:1rem 1.3rem;margin-bottom:0.9rem;">
-            <div style="font-family:\'Playfair Display\',Georgia,serif;font-style:italic;
-                        font-size:0.93rem;color:{CREAM};line-height:1.85;margin-bottom:0.5rem;">
-                "{text}"
-            </div>
-            <div style="font-size:0.72rem;color:{PURE_GOLD};letter-spacing:0.08em;">
-                — {attribution}{ref_html}
-            </div>
-        </div>''', unsafe_allow_html=True)
+    ref_part = (' — ' + ref) if ref else ""
+    html = (
+        '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
+        'border-radius:4px;padding:1rem 1.3rem;margin-bottom:0.9rem;">'
+        '<div style="font-family:Georgia,serif;font-style:italic;font-size:0.93rem;'
+        'color:#FFF8DC;line-height:1.85;margin-bottom:0.5rem;">&ldquo;' + text + '&rdquo;</div>'
+        '<div style="font-size:0.72rem;color:#D4AF37;letter-spacing:0.08em;">'
+        '&mdash; ' + attribution + ref_part + '</div>'
+        '</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 def tag(text: str, color: str = TYRIAN_PURPLE):
     return f'<span style="display:inline-block;background:{color};color:{PURE_GOLD};font-size:0.68rem;padding:2px 9px;border-radius:2px;border:1px solid rgba(212,175,55,0.333);margin:2px;letter-spacing:0.06em;">{text}</span>'
@@ -489,7 +494,7 @@ with st.sidebar:
                 CHRISTIAN APOLOGETICS CODEX
             </div>
         </div>
-        <div style="height:1px;background:linear-gradient(90deg,rgba(212,175,55,0),rgba(212,175,55,0.4),rgba(212,175,55,0));margin:0.3rem 0 1rem;"></div>
+        <div style="border-top:1px solid #D4AF37;margin:0.5rem 0 1rem;opacity:0.4;"></div>
     """, unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-size:0.65rem;color:rgba(245,225,122,0.6);letter-spacing:0.15em;margin-bottom:0.4rem">📖 TRANSLATION</div>', unsafe_allow_html=True)
@@ -720,18 +725,17 @@ with tab2:
     # ── Scholar Commentaries ──
     section_header("Scholarly Commentary")
     for sch in data["scholars"]:
-        st.markdown(f'''
-            <div style="background:linear-gradient(135deg,{NAVY},rgba(0,56,168,0.133));
-                        border:1px solid rgba(212,175,55,0.2);border-left:4px solid {PURE_GOLD};
-                        border-radius:4px;padding:1.1rem 1.3rem;margin-bottom:1rem;">
-                <div style="font-family:'Playfair Display',Georgia,serif;
-                            font-size:1rem;font-weight:600;color:{PURE_GOLD};margin-bottom:0.2rem;">
-                    {sch["author"]}
-                </div>
-                <div style="font-size:0.65rem;color:rgba(245,225,122,0.533);letter-spacing:0.06em;
-                            margin-bottom:0.7rem;font-style:italic;">{sch["work"]}</div>
-                <div style="font-size:0.86rem;color:{CREAM};line-height:1.88;">{sch["text"]}</div>
-            </div>''', unsafe_allow_html=True)
+        author_html = (
+            '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
+            'border-radius:4px;padding:1.1rem 1.3rem;margin-bottom:1rem;">'
+            '<div style="font-family:Georgia,serif;font-size:1rem;font-weight:600;'
+            'color:#D4AF37;margin-bottom:0.2rem;">' + sch["author"] + '</div>'
+            '<div style="font-size:0.65rem;color:#F5E17A;opacity:0.75;letter-spacing:0.06em;'
+            'margin-bottom:0.7rem;font-style:italic;">' + sch["work"] + '</div>'
+            '<div style="font-size:0.86rem;color:#FFF8DC;line-height:1.88;">' + sch["text"] + '</div>'
+            '</div>'
+        )
+        st.markdown(author_html, unsafe_allow_html=True)
 
     col_lex, col_xref = st.columns(2, gap="large")
 
