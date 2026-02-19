@@ -680,6 +680,57 @@ def build_word_freq_chart(text: str, title: str = "Word Frequency Analysis"):
     )
     return fig
 
+
+def build_genealogy_dot(focus: str = "Full Lineage") -> str:
+    """
+    Build a raw Graphviz DOT string accepted directly by st.graphviz_chart.
+    No 'graphviz' Python package import required — only the system binary
+    installed via packages.txt is needed for rendering.
+    """
+    patriarchs = {"Abraham", "Isaac", "Jacob", "Judah", "David", "Solomon", "Jesus of Nazareth"}
+    women       = {"Sarah", "Rebekah", "Leah", "Tamar", "Rahab", "Ruth", "Bathsheba", "Mary"}
+
+    def nid(name: str) -> str:
+        return '"' + name.replace('"', '\\"') + '"'
+
+    GOLD  = "#D4AF37"
+    PURP  = "#66023C"
+    SCAR  = "#B22222"
+    NVY   = "#0A1628"
+    BLUE  = "#0038A8"
+    CRM   = "#FFF8DC"
+
+    lines = [
+        "digraph G {",
+        f'  graph [rankdir=TB bgcolor="{NVY}" fontcolor="{GOLD}" pad="0.5" nodesep="0.35" ranksep="0.55"];',
+        f'  node  [shape=box style="filled,rounded" fillcolor="{BLUE}" color="{GOLD}" fontcolor="{GOLD}" fontname="Helvetica" fontsize="10"];',
+        f'  edge  [color="{GOLD}" arrowhead=open arrowsize=0.7];',
+    ]
+
+    for name, _ in GENEALOGY_DATA["nodes"]:
+        if focus == "Patriarchs" and name not in patriarchs and name not in women:
+            continue
+        n = nid(name)
+        if name == "Jesus of Nazareth":
+            lines.append(f'  {n} [fillcolor="{GOLD}" fontcolor="{NVY}" color="{GOLD}" penwidth=3 fontsize=12];')
+        elif name in patriarchs:
+            lines.append(f'  {n} [fillcolor="{PURP}" fontcolor="{GOLD}"];')
+        elif name in women:
+            lines.append(f'  {n} [fillcolor="{SCAR}" fontcolor="{CRM}"];')
+        else:
+            lines.append(f'  {n};')
+
+    for src, dst in GENEALOGY_DATA["edges"]:
+        if focus == "Patriarchs":
+            if src not in patriarchs and src not in women:
+                continue
+            if dst not in patriarchs and dst not in women:
+                continue
+        lines.append(f"  {nid(src)} -> {nid(dst)};")
+
+    lines.append("}")
+    return "\n".join(lines)
+
 def render_timeline():
     """Render timeline using HTML/JS vis-timeline."""
     items_json = json.dumps(TIMELINE_EVENTS)
@@ -738,8 +789,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-size:0.72rem;color:{LIGHT_GOLD};letter-spacing:0.15em;margin-bottom:0.3rem">⚙ INTELLECTUAL DEPTH</div>', unsafe_allow_html=True)
-    depth = st.slider("", min_value=1, max_value=2, value=1, step=1,
-                      format="%d", key="depth_slider",
+    depth = st.slider("Intellectual Depth", min_value=1, max_value=2, value=1, step=1,
+                      format="%d", key="depth_slider", label_visibility="collapsed",
                       help="Level 1 = Discovery (all ages) | Level 2 = Scholar (graduate)")
     depth_label = "🔍 DISCOVERY MODE" if depth == 1 else "🎓 SCHOLAR MODE"
     depth_color = SCARLET if depth == 1 else TYRIAN_PURPLE
@@ -747,7 +798,7 @@ with st.sidebar:
 
     st.markdown(f'<hr style="border-color:{PURE_GOLD}44;margin:0.8rem 0"/>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-size:0.72rem;color:{LIGHT_GOLD};letter-spacing:0.15em;margin-bottom:0.3rem">📖 TRANSLATION</div>', unsafe_allow_html=True)
-    translation = st.selectbox("", ["kjv", "web", "bbe"], index=0,
+    translation = st.selectbox("Translation", ["kjv", "web", "bbe"], index=0, label_visibility="collapsed",
                                 format_func=lambda x: {"kjv":"King James Version (KJV)",
                                                         "web":"World English Bible (WEB)",
                                                         "bbe":"Bible in Basic English (BBE)"}[x])
@@ -821,7 +872,7 @@ with tab1:
 
     col_ref, col_btn = st.columns([4, 1])
     with col_ref:
-        ref_input = st.text_input("", value="John 3:16", placeholder="e.g. Isaiah 53:5",
+        ref_input = st.text_input("Scripture Reference", value="John 3:16", placeholder="e.g. Isaiah 53:5",
                                    label_visibility="collapsed")
     with col_btn:
         fetch_btn = st.button("⟳ FETCH", use_container_width=True)
@@ -896,9 +947,9 @@ with tab2:
 
     col_a, col_b = st.columns(2, gap="medium")
     with col_a:
-        st.plotly_chart(build_theme_heatmap(), use_container_width=True)
+        st.plotly_chart(build_theme_heatmap(), width="stretch")
     with col_b:
-        st.plotly_chart(build_cross_ref_heatmap(), use_container_width=True)
+        st.plotly_chart(build_cross_ref_heatmap(), width="stretch")
 
     st.markdown('<hr/>', unsafe_allow_html=True)
 
@@ -916,7 +967,7 @@ with tab2:
                 f"Word Frequency — {st.session_state.get('scripture_ref', 'Selected Passage')}"
             )
             if wf_fig:
-                st.plotly_chart(wf_fig, use_container_width=True)
+                st.plotly_chart(wf_fig, width="stretch")
             else:
                 card(f'<span style="color:{LIGHT_GOLD}88">Passage too short or contains only common words — try a longer reference.</span>')
         except Exception as e:
@@ -955,7 +1006,7 @@ with tab2:
 
         st.dataframe(
             lex_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Term":              st.column_config.TextColumn("TERM", width=90),
@@ -992,7 +1043,7 @@ with tab3:
              "Category": e["group"]}
             for e in TIMELINE_EVENTS
         ])
-        st.dataframe(timeline_df, use_container_width=True, hide_index=True,
+        st.dataframe(timeline_df, width="stretch", hide_index=True,
                      column_config={
                          "Event":    st.column_config.TextColumn("BIBLICAL / WORLD EVENT"),
                          "Approx. Date": st.column_config.TextColumn("APPROX. DATE"),
@@ -1058,7 +1109,7 @@ with tab5:
 
     col_ap1, col_ap2 = st.columns(2, gap="medium")
     with col_ap1:
-        st.plotly_chart(build_manuscript_chart(), use_container_width=True)
+        st.plotly_chart(build_manuscript_chart(), width="stretch")
 
     with col_ap2:
         section_header("MANUSCRIPT EVIDENCE TABLE")
@@ -1069,7 +1120,7 @@ with tab5:
         ])
         st.dataframe(
             ms_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=330,
             column_config={
@@ -1104,7 +1155,7 @@ with tab5:
     arch_df = pd.DataFrame(arch_data)
     st.dataframe(
         arch_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Site/Discovery":  st.column_config.TextColumn("SITE / DISCOVERY"),
