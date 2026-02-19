@@ -628,94 +628,236 @@ def build_theme_heatmap():
 
 def build_word_freq_chart(text: str, title: str = "Word Frequency Analysis"):
     """
-    Build a word-frequency bar chart from scripture text.
-    Guards: empty text, empty freq dict, zip-on-empty-sequence.
-    All Plotly color values are strict 6-digit hex or rgba() strings.
+    Word frequency bar chart driven entirely by the fetched scripture text.
+    - Requires passages of 5+ meaningful words to render
+    - Color-grades bars across a Navy→Gold scale by count
+    - Includes 3-letter words for short passages (KJV uses many: sin, law, God, joy)
+    - Returns None with a descriptive reason string on failure
     """
-    import re
+    import re, collections
 
-    # ── Guard: no text supplied ──
+    GOLD  = "#D4AF37"
+    SCAR  = "#B22222"
+    NVY   = "#0A1628"
+    BLUE  = "#0038A8"
+    PURP  = "#66023C"
+    GRID  = "rgba(212,175,55,0.12)"
+
     if not text or not text.strip():
-        return None
-
-    GOLD_STR   = "#D4AF37"   # PURE_GOLD  — explicit literals avoid f-string suffix bugs
-    SCARLET_STR= "#B22222"   # SCARLET
-    NAVY_STR   = "#0A1628"   # NAVY
-    BLUE_STR   = "#0038A8"   # BIBLICAL_BLUE
-    GRID_COLOR = "rgba(212,175,55,0.12)"  # PURE_GOLD @ 12% opacity — valid Plotly rgba
+        return None, "no_text"
 
     stop = {
         "the","and","of","a","in","to","is","he","that","his","for","they",
         "i","it","my","me","be","not","with","this","but","who","was","are",
         "him","her","you","your","we","our","shall","will","unto","thou",
         "thee","hath","have","had","were","their","them","then","when","from",
-        "which","said","came","upon","into","all","one","an","so","by",
-        "at","or","if","do","no","up","as","she","out","its","did","also",
-        "hast","doth","may","let","more","even","therefore","thus","every",
+        "which","said","came","upon","into","all","one","an","so","by","at",
+        "or","if","do","no","up","as","she","out","its","did","also","hast",
+        "doth","may","let","more","even","therefore","thus","every","yet",
+        "yea","nay","nor","how","now","then","what","who","whom","whose",
     }
 
-    words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    freq: dict = {}
-    for w in words:
-        if w not in stop:
-            freq[w] = freq.get(w, 0) + 1
+    # Try 4+ letters first; fall back to 3+ for short passages
+    words = re.findall(r"\b[a-zA-Z']{4,}\b", text.lower())
+    if len([w for w in words if w not in stop]) < 5:
+        words = re.findall(r"\b[a-zA-Z']{3,}\b", text.lower())
 
-    if not freq:
-        return None
+    freq = collections.Counter(w for w in words if w not in stop and w.isalpha())
 
-    top = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:20]
+    if not freq or max(freq.values()) < 1:
+        return None, "no_words"
 
-    # ── Guard: zip requires non-empty sequence ──
+    # Only show bars where count >= 1; limit to top 15
+    top = freq.most_common(15)
     if not top:
-        return None
+        return None, "no_words"
 
-    words_out, counts = zip(*top)
-    words_list  = list(words_out)
-    counts_list = list(counts)
-    max_count   = max(counts_list)
+    labels = [w.upper() for w, _ in top]
+    counts = [c for _, c in top]
+    max_c  = max(counts)
+    min_c  = min(counts)
 
-    bar_colors = [SCARLET_STR if c == max_count else GOLD_STR for c in counts_list]
+    # Color scale: low count = Navy, mid = Tyrian Purple, high = Gold
+    def count_to_color(c):
+        if max_c == min_c:
+            return GOLD
+        ratio = (c - min_c) / (max_c - min_c)
+        if ratio > 0.75:  return GOLD
+        if ratio > 0.45:  return SCAR
+        if ratio > 0.2:   return PURP
+        return NVY[:-2] + "44"   # dim navy for lowest-frequency words
 
-    fig = go.Figure(
-        go.Bar(
-            x=words_list,
-            y=counts_list,
-            marker=dict(
-                color=bar_colors,
-                line=dict(color=NAVY_STR, width=1),
-            ),
-            hovertemplate="<b>%{x}</b><br>Count: %{y}<extra></extra>",
-        )
-    )
+    bar_colors = [count_to_color(c) for c in counts]
+    bar_borders = [GOLD if c == max_c else "rgba(212,175,55,0.3)" for c in counts]
+
+    fig = go.Figure(go.Bar(
+        x=labels,
+        y=counts,
+        marker=dict(color=bar_colors, line=dict(color=bar_borders, width=1.5)),
+        text=[str(c) for c in counts],
+        textposition="outside",
+        textfont=dict(color=GOLD, size=10),
+        hovertemplate="<b>%{x}</b><br>Occurrences: %{y}<extra></extra>",
+    ))
 
     fig.update_layout(
-        title={
-            "text": title,
-            "x": 0.5,
-            "xanchor": "center",
-            "font": {"family": "sans-serif", "size": 18, "color": GOLD_STR},
-        },
-        plot_bgcolor=NAVY_STR,
-        paper_bgcolor=BLUE_STR,
-        font={"family": "monospace", "color": GOLD_STR, "size": 11},
-        xaxis={
-            "color": GOLD_STR,
-            "tickfont": {"size": 9, "color": GOLD_STR},
-            "tickangle": -40,
-            "gridcolor": GRID_COLOR,
-            "linecolor": GOLD_STR,
-        },
-        yaxis={
-            "color": GOLD_STR,
-            "tickfont": {"size": 9, "color": GOLD_STR},
-            "gridcolor": GRID_COLOR,
-            "linecolor": GOLD_STR,
-        },
-        margin={"l": 20, "r": 20, "t": 55, "b": 90},
-        height=340,
+        title={"text": title, "x": 0.5, "xanchor": "center",
+               "font": {"family": "sans-serif", "size": 16, "color": GOLD}},
+        plot_bgcolor=NVY,
+        paper_bgcolor=BLUE,
+        font={"family": "monospace", "color": GOLD, "size": 10},
+        xaxis={"color": GOLD, "tickfont": {"size": 9, "color": GOLD},
+               "tickangle": -35, "gridcolor": GRID, "linecolor": GOLD},
+        yaxis={"color": GOLD, "tickfont": {"size": 9, "color": GOLD},
+               "gridcolor": GRID, "linecolor": GOLD,
+               "title": "Occurrences", "dtick": 1},
+        margin={"l": 30, "r": 20, "t": 55, "b": 90},
+        height=360,
+        showlegend=False,
+    )
+    return fig, "ok"
+
+
+
+def build_sentiment_arc(verses: list, ref: str) -> "go.Figure | None":
+    """
+    Plots a positivity/gravity arc across the verses of a passage.
+    Uses a curated theological word list to score each verse.
+    Useful for seeing narrative tension and resolution patterns.
+    """
+    GOLD = "#D4AF37"; SCAR = "#B22222"; NVY = "#0A1628"; BLUE = "#0038A8"
+    PURP = "#66023C"; CREAM = "#FFF8DC"
+
+    positive = {"love","grace","peace","joy","blessed","glory","saved","light",
+                "life","hope","faith","holy","righteous","mercy","truth","risen",
+                "good","great","praise","worship","eternal","redemption","free",
+                "heal","restore","promise","covenant","rejoice","victory","live"}
+    grave    = {"sin","death","wrath","judgment","cursed","evil","darkness","lost",
+                "fear","suffering","wicked","condemned","perish","punish","blood",
+                "broken","affliction","tribulation","hell","weeping","shame",
+                "burden","grief","iniquity","transgression","fornication","destroy"}
+
+    if not verses:
+        return None
+
+    scores, labels, hover = [], [], []
+    for v in verses:
+        num  = v.get("verse", "")
+        text = v.get("text", "").lower()
+        words = text.split()
+        pos = sum(1 for w in words if any(p in w for p in positive))
+        neg = sum(1 for w in words if any(g in w for g in grave))
+        score = pos - neg
+        scores.append(score)
+        labels.append(f"v{num}")
+        hover.append(f"Verse {num}<br>Positive signals: {pos}<br>Grave signals: {neg}<br>Net: {score:+d}")
+
+    if not scores:
+        return None
+
+    fig = go.Figure()
+    # Filled area under curve
+    fig.add_trace(go.Scatter(
+        x=labels, y=scores,
+        fill="tozeroy",
+        fillcolor="rgba(212,175,55,0.12)",
+        line=dict(color=GOLD, width=2.5),
+        mode="lines+markers",
+        marker=dict(
+            size=9,
+            color=[GOLD if s > 0 else SCAR if s < 0 else PURP for s in scores],
+            line=dict(color=NVY, width=1)
+        ),
+        text=hover,
+        hovertemplate="%{text}<extra></extra>",
+        name="Tone Arc"
+    ))
+    # Zero baseline
+    fig.add_hline(y=0, line_dash="dot", line_color="rgba(212,175,55,0.4)", line_width=1)
+
+    fig.update_layout(
+        title={"text": f"Theological Tone Arc — {ref}", "x": 0.5,
+               "font": {"family": "sans-serif", "size": 15, "color": GOLD}},
+        plot_bgcolor=NVY, paper_bgcolor=BLUE,
+        font={"family": "monospace", "color": GOLD, "size": 10},
+        xaxis={"title": "Verse", "color": GOLD, "tickfont": {"size": 9},
+               "gridcolor": "rgba(212,175,55,0.08)", "linecolor": GOLD},
+        yaxis={"title": "Tone Score (+positive / −grave)", "color": GOLD,
+               "tickfont": {"size": 9}, "gridcolor": "rgba(212,175,55,0.08)",
+               "linecolor": GOLD, "zeroline": False},
+        margin={"l": 50, "r": 20, "t": 50, "b": 50},
+        height=320,
+        showlegend=False,
     )
     return fig
 
+
+def build_theme_scanner(text: str, ref: str) -> "go.Figure | None":
+    """
+    Scans the fetched passage for the presence of key theological themes.
+    Returns a horizontal bar chart showing theme signal strength in the passage.
+    This is data-driven: 0 = absent, higher = multiple hits.
+    """
+    GOLD = "#D4AF37"; SCAR = "#B22222"; NVY = "#0A1628"; BLUE = "#0038A8"; PURP = "#66023C"
+
+    if not text:
+        return None
+
+    THEMES = {
+        "Grace":       ["grace","favor","mercy","unmerited","gift","freely"],
+        "Judgment":    ["judge","judgment","wrath","condemn","punish","righteous anger","account"],
+        "Covenant":    ["covenant","promise","oath","agreement","law","testament","bond"],
+        "Messiah":     ["christ","messiah","anointed","savior","lord","son of god","king"],
+        "Redemption":  ["redeem","redeeming","ransom","bought","freed","delivered","blood","sacrifice"],
+        "Faith":       ["faith","believe","trust","belief","confidence","assurance"],
+        "Eternal Life":["eternal","everlasting","forever","life","immortal","perish not","resurrection"],
+        "Sin / Fall":  ["sin","iniquity","transgress","trespass","evil","wicked","fall","flesh"],
+        "Holy Spirit": ["spirit","ghost","holy spirit","comforter","advocate","breath","wind"],
+        "Love":        ["love","agape","loved","loving","beloved","charity"],
+    }
+
+    t = text.lower()
+    scores, theme_names = [], []
+    for theme, keywords in THEMES.items():
+        count = sum(t.count(kw) for kw in keywords)
+        if count > 0:
+            scores.append(count)
+            theme_names.append(theme)
+
+    if not scores:
+        return None
+
+    # Sort by score
+    pairs = sorted(zip(scores, theme_names), reverse=True)
+    scores     = [s for s, _ in pairs]
+    theme_names= [n for _, n in pairs]
+    max_s = max(scores)
+
+    bar_colors = [GOLD if s == max_s else (SCAR if s >= max_s * 0.6 else PURP) for s in scores]
+
+    fig = go.Figure(go.Bar(
+        x=scores, y=theme_names,
+        orientation="h",
+        marker=dict(color=bar_colors, line=dict(color=NVY, width=1)),
+        text=[str(s) for s in scores],
+        textposition="outside",
+        textfont=dict(color=GOLD, size=10),
+        hovertemplate="<b>%{y}</b><br>Signal hits: %{x}<extra></extra>",
+    ))
+    fig.update_layout(
+        title={"text": f"Theological Theme Scanner — {ref}", "x": 0.5,
+               "font": {"family": "sans-serif", "size": 15, "color": GOLD}},
+        plot_bgcolor=NVY, paper_bgcolor=BLUE,
+        font={"family": "monospace", "color": GOLD, "size": 10},
+        xaxis={"title": "Signal Hits in Passage", "color": GOLD,
+               "tickfont": {"size": 9}, "gridcolor": "rgba(212,175,55,0.10)",
+               "linecolor": GOLD, "dtick": 1},
+        yaxis={"color": GOLD, "tickfont": {"size": 10}, "linecolor": GOLD},
+        margin={"l": 110, "r": 40, "t": 50, "b": 50},
+        height=max(280, len(theme_names) * 38),
+        showlegend=False,
+    )
+    return fig
 
 def build_genealogy_dot(focus: str = "Full Lineage") -> str:
     """
@@ -993,79 +1135,128 @@ with tab1:
 # TAB 2 — THEOLOGY ANALYTICS
 # ══════════════════════════════════════════════
 with tab2:
-    section_header("📊 THEOLOGICAL ANALYTICS SUITE")
+    # ── Pull current passage from session state ──
+    verses       = st.session_state.get("scripture_data", {}).get("verses", [])
+    passage_text = " ".join(v.get("text", "") for v in verses).strip()
+    passage_ref  = st.session_state.get("scripture_ref", "")
 
-    col_a, col_b = st.columns(2, gap="medium")
-    with col_a:
-        st.plotly_chart(build_theme_heatmap(), width="stretch")
-    with col_b:
-        st.plotly_chart(build_cross_ref_heatmap(), width="stretch")
+    has_passage  = bool(verses and passage_text)
 
-    st.markdown('<hr/>', unsafe_allow_html=True)
-
-    section_header("WORD FREQUENCY ANALYSIS")
-    scripture_text = ""
-    if st.session_state.get("scripture_data", {}).get("verses"):
-        scripture_text = " ".join(
-            v.get("text","") for v in st.session_state.scripture_data["verses"]
+    # ── Header with passage context ──
+    if has_passage:
+        section_header(f"📊 PASSAGE ANALYTICS — {passage_ref}")
+        st.markdown(
+            f'''<div style="font-size:0.72rem;color:{LIGHT_GOLD};letter-spacing:0.08em;
+                margin-bottom:1rem;font-family:'IBM Plex Mono',monospace;">
+            All charts below are generated from the passage currently loaded in Scripture Lab.
+            Load a longer passage (e.g. <em>Romans 8:28-39</em>, <em>Psalm 23</em>,
+            <em>John 1:1-18</em>) for richer analysis.
+            </div>''',
+            unsafe_allow_html=True,
+        )
+    else:
+        section_header("📊 THEOLOGY ANALYTICS")
+        card(
+            f'''<div style="text-align:center;padding:1.5rem;color:{LIGHT_GOLD};font-size:0.85rem;">
+            ✝️ &nbsp; Load a scripture passage in the <strong style="color:{PURE_GOLD}">Scripture Lab</strong>
+            tab first. All analytics are driven by the fetched passage.
+            <br><br>
+            <em style="font-size:0.75rem;">Try: Romans 8:28-39 · Psalm 23 · John 1:1-18 · Isaiah 53 · Hebrews 11</em>
+            </div>'''
         )
 
-    if scripture_text and scripture_text.strip():
-        try:
-            wf_fig = build_word_freq_chart(
-                scripture_text,
-                f"Word Frequency — {st.session_state.get('scripture_ref', 'Selected Passage')}"
+    if has_passage:
+        # ── ROW 1: Word Frequency + Theme Scanner side by side ──
+        col_left, col_right = st.columns(2, gap="medium")
+
+        with col_left:
+            section_header("WORD FREQUENCY")
+            st.markdown(
+                f'<div style="font-size:0.68rem;color:{LIGHT_GOLD}99;margin-bottom:0.4rem;">                Significant words in the passage, ranked by occurrence.                </div>',
+                unsafe_allow_html=True,
             )
+            wf_result = build_word_freq_chart(
+                passage_text,
+                f"Word Frequency — {passage_ref}"
+            )
+            if isinstance(wf_result, tuple):
+                wf_fig, wf_status = wf_result
+            else:
+                wf_fig, wf_status = None, "error"
+
             if wf_fig:
                 st.plotly_chart(wf_fig, width="stretch")
             else:
-                card(f'<span style="color:{LIGHT_GOLD}88">Passage too short or contains only common words — try a longer reference.</span>')
-        except Exception as e:
-            card(f'<span style="color:{SCARLET}">⚠ Chart error: {e}</span>', "scarlet")
-    else:
-        card(f'<span style="color:{LIGHT_GOLD}88">Load a scripture passage in the Scripture Lab tab to enable word frequency analysis.</span>')
+                card(
+                    f'<span style="color:{LIGHT_GOLD}88;font-size:0.8rem;">                    Passage too brief for frequency analysis — try a multi-verse reference.                    </span>'
+                )
 
-    if depth == 2:
+        with col_right:
+            section_header("THEOLOGICAL THEME SCANNER")
+            st.markdown(
+                f'<div style="font-size:0.68rem;color:{LIGHT_GOLD}99;margin-bottom:0.4rem;">                Detects presence and signal strength of theological themes in this passage.                </div>',
+                unsafe_allow_html=True,
+            )
+            theme_fig = build_theme_scanner(passage_text, passage_ref)
+            if theme_fig:
+                st.plotly_chart(theme_fig, width="stretch")
+            else:
+                card(
+                    f'<span style="color:{LIGHT_GOLD}88;font-size:0.8rem;">                    No tracked theological themes detected in this passage.                    </span>'
+                )
+
         st.markdown('<hr/>', unsafe_allow_html=True)
-        section_header("LEXICAL DISTRIBUTION TABLE")
-        lex_df = pd.DataFrame([
-            {"Term": k, "Strong's": v["strongs"],
-             "Transliteration": v["transliteration"],
-             "Language": "Greek" if v["strongs"].startswith("G") else "Hebrew",
-             "Definition": v["definition"][:60] + "..."}
-            for k, v in STRONGS_GREEK.items()
-        ])
 
-        def style_lex_table(df):
-            return df.style.set_properties(**{
-                'background-color': NAVY,
-                'color': PURE_GOLD,
-                'font-family': 'IBM Plex Mono',
-                'font-size': '11px',
-                'border': f'1px solid {PURE_GOLD}44',
-            }).set_table_styles([
-                {'selector': 'th', 'props': [
-                    ('background-color', PURE_GOLD),
-                    ('color', NAVY),
-                    ('font-family', 'IBM Plex Mono'),
-                    ('font-size', '11px'),
-                    ('font-weight', '600'),
-                    ('letter-spacing', '0.05em'),
-                ]}
-            ])
-
-        st.dataframe(
-            lex_df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Term":              st.column_config.TextColumn("TERM", width=90),
-                "Strong's":          st.column_config.TextColumn("STRONG'S", width=80),
-                "Transliteration":   st.column_config.TextColumn("TRANSLITERATION", width=120),
-                "Language":          st.column_config.TextColumn("LANG", width=70),
-                "Definition":        st.column_config.TextColumn("DEFINITION"),
-            }
+        # ── ROW 2: Tone / Sentiment Arc (full width) ──
+        section_header("THEOLOGICAL TONE ARC")
+        st.markdown(
+            f'<div style="font-size:0.68rem;color:{LIGHT_GOLD}99;margin-bottom:0.4rem;">            Plots the theological tension across each verse — gold peaks indicate            grace/life/hope signals; red troughs indicate judgment/sin/death signals.            </div>',
+            unsafe_allow_html=True,
         )
+        arc_fig = build_sentiment_arc(verses, passage_ref)
+        if arc_fig:
+            st.plotly_chart(arc_fig, width="stretch")
+        else:
+            card(f'<span style="color:{LIGHT_GOLD}88;font-size:0.8rem;">Need 2+ verses for tone arc analysis.</span>')
+
+        st.markdown('<hr/>', unsafe_allow_html=True)
+
+        # ── ROW 3: Static reference heatmaps (always shown as reference tools) ──
+        section_header("BIBLICAL CROSS-REFERENCE DENSITY MAP")
+        st.markdown(
+            f'<div style="font-size:0.68rem;color:{LIGHT_GOLD}99;margin-bottom:0.4rem;">            Reference: How frequently each NT book cites each OT book (Treasury of Scripture Knowledge data).            </div>',
+            unsafe_allow_html=True,
+        )
+        col_h1, col_h2 = st.columns(2, gap="medium")
+        with col_h1:
+            st.plotly_chart(build_cross_ref_heatmap(), width="stretch")
+        with col_h2:
+            st.plotly_chart(build_theme_heatmap(), width="stretch")
+
+        # ── Lexical table (Scholar mode only) ──
+        if depth == 2:
+            st.markdown('<hr/>', unsafe_allow_html=True)
+            section_header("LEXICAL DISTRIBUTION TABLE // Strong's G/H")
+            lex_df = pd.DataFrame([
+                {"Term": k,
+                 "Strong's": v["strongs"],
+                 "Transliteration": v["transliteration"],
+                 "Language": "Greek" if v["strongs"].startswith("G") else "Hebrew",
+                 "Definition": v["definition"][:65] + "…"}
+                for k, v in STRONGS_GREEK.items()
+            ])
+            st.dataframe(
+                lex_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Term":            st.column_config.TextColumn("TERM",           width=90),
+                    "Strong's":       st.column_config.TextColumn("STRONG'S",      width=80),
+                    "Transliteration": st.column_config.TextColumn("TRANSLITERATION",width=130),
+                    "Language":        st.column_config.TextColumn("LANG",            width=65),
+                    "Definition":      st.column_config.TextColumn("DEFINITION"),
+                },
+            )
 
 # ══════════════════════════════════════════════
 # TAB 3 — HISTORICAL TIMELINE
