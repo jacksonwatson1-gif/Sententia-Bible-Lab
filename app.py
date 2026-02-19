@@ -516,7 +516,7 @@ def build_manuscript_chart():
         font={"family": "monospace", "color": GOLD},
         xaxis={"title": "Total Extant Manuscripts", "gridcolor": GGRID,
                "color": GOLD, "tickfont": {"size": 10}},
-        yaxis={"gridcolor": "transparent", "color": GOLD, "tickfont": {"size": 10}},
+        yaxis={"gridcolor": "rgba(0,0,0,0)", "color": GOLD, "tickfont": {"size": 10}},
         margin={"l": 10, "r": 80, "t": 60, "b": 40},
         height=380,
     )
