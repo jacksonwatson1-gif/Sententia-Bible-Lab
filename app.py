@@ -141,6 +141,12 @@ def get_esv_key() -> str:
     except Exception:
         return ""
 
+def get_anthropic_key() -> str:
+    try:
+        return st.secrets["ANTHROPIC_API_KEY"]
+    except Exception:
+        return ""
+
 
 # ─────────────────────────────────────────────
 # HARDCODED KJV FALLBACKS
@@ -1041,6 +1047,98 @@ def fetch_esv(reference: str, esv_key: str) -> dict:
 
 
 # ─────────────────────────────────────────────
+# AI FUNCTIONS
+# ─────────────────────────────────────────────
+
+SCHOLAR_SYSTEM_PROMPT = """You are a rigorous Christian biblical scholar and apologist operating within a graduate-level research workstation called Sententia Bible Lab. Your scholarly framework is as follows:
+
+HERMENEUTICAL METHOD: Historical-grammatical exegesis as primary method. You privilege the author's intended meaning within the original historical and cultural context. You follow the redemptive-historical approach of Geerhardus Vos and D.A. Carson.
+
+THEOLOGICAL TRADITION: Broadly Reformed evangelical, but you engage all serious theological positions fairly. You are conversant with Calvinist, Arminian, Lutheran, Catholic, and Eastern Orthodox positions and can represent each accurately.
+
+SCHOLARLY SOURCES YOU DRAW ON:
+- Commentaries: Brown (AB), Carson (Pillar), Morris (NICNT), Moo (NICNT), Schreiner (BECNT), Fee (NICNT), Oswalt (NICOT), Kidner (TOTC), Craigie (WBC), Wright (NIB), O'Brien (NIGTC), Köstenberger (BECNT)
+- Apologetics: Craig (Reasonable Faith), Plantinga (Warranted Christian Belief, Nature of Necessity), Habermas & Licona (Case for the Resurrection), Collins (fine-tuning), Reppert (Argument from Reason), Moreland (Consciousness and the Existence of God)
+- Church Fathers: Justin Martyr, Irenaeus, Tertullian, Origen, Athanasius, Augustine, Chrysostom, Anselm, Aquinas
+- Languages: You work with Greek NT (NA28) and Hebrew OT (BHS). You cite Strong's numbers when relevant.
+
+RESPONSE STANDARDS:
+- Cite specific scholars, works, and where possible page ranges
+- Flag genuine scholarly uncertainty rather than projecting false confidence
+- Distinguish exegetical conclusions from theological inferences
+- When multiple interpretations exist, present them with their respective advocates
+- Use technical vocabulary accurately: distinguish justification from sanctification, propitiation from expiation, morphē from schēma, etc.
+- Never confabulate citations — if unsure of a specific page number, omit it rather than guess
+
+FORMAT: Respond in well-structured prose. Use bold for key Greek/Hebrew terms on first occurrence. Keep responses substantive but not padded."""
+
+
+def ai_chat(messages: list, anthropic_key: str, max_tokens: int = 1200) -> str:
+    """Send a message list to Claude and return the text response."""
+    if not anthropic_key:
+        return "⚠ No Anthropic API key configured. Add ANTHROPIC_API_KEY to Streamlit secrets."
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {
+        "x-api-key":         anthropic_key,
+        "anthropic-version": "2023-06-01",
+        "content-type":      "application/json",
+    }
+    payload = {
+        "model":      "claude-haiku-4-5-20251001",
+        "max_tokens": max_tokens,
+        "system":     SCHOLAR_SYSTEM_PROMPT,
+        "messages":   messages,
+    }
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=60)
+        if r.status_code == 200:
+            return r.json()["content"][0]["text"]
+        elif r.status_code == 401:
+            return "⚠ API key invalid. Check ANTHROPIC_API_KEY in Streamlit secrets."
+        else:
+            return f"⚠ API error {r.status_code}: {r.text[:200]}"
+    except Exception as e:
+        return f"⚠ Request failed: {str(e)}"
+
+
+def ai_analyse_passage(reference: str, verse_text: str, anthropic_key: str) -> str:
+    """Generate a full exegetical analysis for any passage."""
+    prompt = (
+        f"Provide a graduate-level exegetical analysis of {reference}. "
+        f"The passage text is:\n\n\"{verse_text}\"\n\n"
+        "Structure your analysis as follows:\n"
+        "1. HISTORICAL & LITERARY CONTEXT — authorship, date, audience, literary setting\n"
+        "2. KEY TERMS — the 3-5 most exegetically significant Greek or Hebrew words with Strong's numbers, transliteration, and semantic analysis\n"
+        "3. SCHOLARLY COMMENTARY — summarise the interpretive positions of 2-3 relevant commentators\n"
+        "4. CROSS-REFERENCES — 4-5 most significant intertextual connections with brief explanation\n"
+        "5. APOLOGETICS INTERFACE — how this passage bears on apologetic arguments or Christian truth claims\n\n"
+        "Be precise. Cite scholars by name and work. Flag interpretive disputes where they exist."
+    )
+    return ai_chat([{"role": "user", "content": prompt}], anthropic_key, max_tokens=1800)
+
+
+def ai_steelman(debate_title: str, position_label: str, position_argument: str,
+                key_texts: list, anthropic_key: str) -> str:
+    """Construct the strongest possible version of a theological debate position."""
+    texts_str = ", ".join(key_texts)
+    prompt = (
+        f"You are tasked with constructing the strongest possible version of the following "
+        f"theological position in the debate: '{debate_title}'.\n\n"
+        f"POSITION: {position_label}\n\n"
+        f"SUMMARY OF POSITION AS GIVEN:\n{position_argument}\n\n"
+        f"KEY TEXTS: {texts_str}\n\n"
+        "Your task is NOT to summarise the position as given above. Your task is to STEELMAN it — "
+        "to construct the most rigorous, exegetically grounded, and philosophically sophisticated "
+        "version of this argument that its most capable defenders would actually make. "
+        "Draw on the strongest exegetical evidence, the most capable scholars who hold this view, "
+        "and address the two or three most serious objections this position faces, showing how a "
+        "sophisticated defender would answer them. "
+        "This is an exercise in charitable reconstruction, not advocacy."
+    )
+    return ai_chat([{"role": "user", "content": prompt}], anthropic_key, max_tokens=1600)
+
+
+# ─────────────────────────────────────────────
 # CHART
 # ─────────────────────────────────────────────
 
@@ -1088,8 +1186,9 @@ with st.sidebar:
                                 label_visibility="collapsed",
                                 format_func=lambda x: {"kjv":"King James Version","web":"World English Bible","bbe":"Basic English"}[x])
 
-    api_key = get_api_bible_key()
-    esv_key = get_esv_key()
+    api_key      = get_api_bible_key()
+    esv_key      = get_esv_key()
+    anthropic_key = get_anthropic_key()
 
     # ESV status (independent of API.Bible)
     if esv_key:
@@ -1113,6 +1212,12 @@ with st.sidebar:
             'API.Bible pending — add <code>BIBLE_API_KEY</code> to secrets when approved.'
             '</div>', unsafe_allow_html=True)
         premium_trans = None
+
+    # AI status
+    if anthropic_key:
+        st.markdown('<div style="font-size:0.65rem;color:#D4AF37;letter-spacing:0.1em;margin:0.3rem 0;">✓ AI SCHOLAR ACTIVE</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="font-size:0.65rem;color:#F5E17A;opacity:0.5;margin:0.3rem 0;">Add <code>ANTHROPIC_API_KEY</code> to secrets to enable AI features.</div>', unsafe_allow_html=True)
 
     st.markdown('<div style="border-top:1px solid #D4AF37;margin:0.8rem 0;opacity:0.2;"></div>', unsafe_allow_html=True)
     st.markdown('<div style="font-size:0.65rem;color:#F5E17A;opacity:0.8;letter-spacing:0.15em;margin-bottom:0.5rem;">QUICK LOAD</div>', unsafe_allow_html=True)
@@ -1156,16 +1261,22 @@ with c4: st.metric("Compositional Span", "~1,500 yrs")
 st.markdown('<hr/>', unsafe_allow_html=True)
 
 
+# Resolve keys outside sidebar scope for use in all tabs
+anthropic_key = get_anthropic_key()
+esv_key       = get_esv_key()
+api_key       = get_api_bible_key()
+
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Scripture Lab",
     "Commentary Engine",
     "Apologetics",
     "Research Prompts",
     "Theological Debates",
+    "AI Scholar",
 ])
 
 
@@ -1223,6 +1334,36 @@ with tab1:
                 'color:#FFF8DC;background:#0A1628;border-left:3px solid #D4AF37;'
                 'padding:1rem 1.2rem;border-radius:3px;border:1px solid rgba(212,175,55,0.2);">'
                 + verse_html + '</div>', unsafe_allow_html=True)
+
+        # AI Passage Analyst
+        if sdata.get("verses"):
+            st.markdown('<hr/>', unsafe_allow_html=True)
+            section_header("AI Passage Analysis")
+            col_ai_btn, col_ai_note = st.columns([2, 5])
+            with col_ai_btn:
+                analyse_btn = st.button("⚡ ANALYSE PASSAGE", key="analyse_btn",
+                                        use_container_width=True,
+                                        disabled=not anthropic_key)
+            with col_ai_note:
+                if not anthropic_key:
+                    st.markdown('<div style="font-size:0.72rem;color:#F5E17A;opacity:0.5;padding-top:0.5rem;">Add ANTHROPIC_API_KEY to secrets to enable.</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div style="font-size:0.72rem;color:#F5E17A;opacity:0.6;padding-top:0.5rem;">Generates full exegetical analysis for any passage — context, key terms, scholarly commentary, cross-references, apologetics interface.</div>', unsafe_allow_html=True)
+
+            if analyse_btn and anthropic_key and sdata.get("verses"):
+                verse_text = " ".join(v.get("text","").strip() for v in sdata["verses"])
+                with st.spinner("Generating analysis — this takes 10–20 seconds..."):
+                    analysis = ai_analyse_passage(sref, verse_text, anthropic_key)
+                st.session_state["ai_analysis"] = analysis
+                st.session_state["ai_analysis_ref"] = sref
+
+            if st.session_state.get("ai_analysis") and st.session_state.get("ai_analysis_ref") == sref:
+                st.markdown(
+                    '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
+                    'border-radius:4px;padding:1.2rem 1.4rem;margin-top:0.5rem;'
+                    'font-size:0.86rem;color:#FFF8DC;line-height:1.95;white-space:pre-wrap;">'
+                    + st.session_state["ai_analysis"].replace("<", "&lt;").replace(">", "&gt;")
+                    + '</div>', unsafe_allow_html=True)
 
         # Parallel translations
         st.markdown('<hr/>', unsafe_allow_html=True)
@@ -1669,8 +1810,143 @@ with tab5:
                 pos = debate_data[key]
                 st.markdown(
                     '<div style="background:#0A1628;border:1px solid rgba(212,175,55,0.2);'
-                    'border-left:4px solid #D4AF37;border-radius:3px;padding:1rem 1.2rem;margin-bottom:0.8rem;">'
+                    'border-left:4px solid #D4AF37;border-radius:3px;padding:1rem 1.2rem;margin-bottom:0.5rem;">'
                     '<div style="font-family:Georgia,serif;font-size:0.95rem;font-weight:600;color:#D4AF37;margin-bottom:0.2rem;">' + pos["label"] + '</div>'
                     '<div style="font-size:0.65rem;color:#F5E17A;opacity:0.7;margin-bottom:0.6rem;font-style:italic;">Advocates: ' + pos["advocates"] + '</div>'
                     '<div style="font-size:0.84rem;color:#FFF8DC;line-height:1.9;">' + pos["argument"] + '</div>'
                     '</div>', unsafe_allow_html=True)
+
+                # Steelman button
+                steelman_key = f"steelman_{debate_title}_{key}"
+                result_key   = f"steelman_result_{debate_title}_{key}"
+                btn_col, note_col = st.columns([2, 5])
+                with btn_col:
+                    if st.button("⚡ STEELMAN THIS", key=steelman_key,
+                                 use_container_width=True,
+                                 disabled=not anthropic_key):
+                        with st.spinner("Constructing strongest version of this argument..."):
+                            result = ai_steelman(
+                                debate_title,
+                                pos["label"],
+                                pos["argument"],
+                                debate_data.get("key_texts", []),
+                                anthropic_key,
+                            )
+                        st.session_state[result_key] = result
+                with note_col:
+                    if not anthropic_key:
+                        st.markdown('<div style="font-size:0.68rem;color:#F5E17A;opacity:0.4;padding-top:0.4rem;">Add ANTHROPIC_API_KEY to enable.</div>', unsafe_allow_html=True)
+
+                if st.session_state.get(result_key):
+                    st.markdown(
+                        '<div style="background:#0A1628;border:1px solid #B22222;border-left:4px solid #B22222;'
+                        'border-radius:3px;padding:1rem 1.2rem;margin-bottom:1rem;'
+                        'font-size:0.84rem;color:#FFF8DC;line-height:1.95;white-space:pre-wrap;">'
+                        '<div style="font-size:0.6rem;color:#B22222;letter-spacing:0.12em;margin-bottom:0.5rem;">AI STEELMAN — ' + pos["label"].upper() + '</div>'
+                        + st.session_state[result_key].replace("<","&lt;").replace(">","&gt;")
+                        + '</div>', unsafe_allow_html=True)
+                    if st.button("✕ Clear", key=f"clear_{steelman_key}"):
+                        del st.session_state[result_key]
+
+
+# ══════════════════════════════════════════════
+# TAB 6 — AI SCHOLAR
+# ══════════════════════════════════════════════
+with tab6:
+    section_header("AI Scholar", "Graduate-level biblical research assistant")
+
+    if not anthropic_key:
+        card(
+            '<div style="font-size:0.86rem;color:#FFF8DC;line-height:1.8;">'
+            '<strong style="color:#D4AF37;">API key not configured.</strong><br>'
+            'Add <code>ANTHROPIC_API_KEY = "sk-ant-..."</code> to your Streamlit secrets '
+            '(Dashboard → Settings → Secrets) and reboot the app.'
+            '</div>', "#B22222")
+    else:
+        st.markdown(
+            '<div style="font-size:0.8rem;color:#F5E17A;opacity:0.75;line-height:1.8;margin-bottom:0.8rem;">'
+            'Ask any question in biblical studies, exegesis, systematic theology, church history, or apologetics. '
+            'The AI Scholar operates within a rigorous evangelical scholarly framework — citing commentators, '
+            'flagging interpretive disputes, and working with original languages.'
+            '</div>', unsafe_allow_html=True)
+
+        # Initialize chat history
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+
+        # Quick prompt buttons
+        section_header("Quick Prompts")
+        quick_prompts = [
+            "What is the exegetical case for penal substitutionary atonement from Romans 3:21–26?",
+            "Explain Plantinga's modal ontological argument and the strongest objection to it.",
+            "What does μορφῇ θεοῦ in Philippians 2:6 mean and why does it matter for Christology?",
+            "Summarise the Calvinism/Arminianism debate on Romans 9 — what is the strongest exegetical argument on each side?",
+            "What is the historical case for the resurrection using only the minimal facts method?",
+            "How do the Dead Sea Scrolls bear on the reliability of the Old Testament text?",
+            "What is the difference between propitiation and expiation in Romans 3:25?",
+            "Explain the fine-tuning argument and the multiverse objection to it.",
+        ]
+        cols = st.columns(2)
+        for i, qp in enumerate(quick_prompts):
+            with cols[i % 2]:
+                if st.button(qp[:65] + ("…" if len(qp) > 65 else ""),
+                             key=f"qp_{i}", use_container_width=True):
+                    st.session_state.chat_history.append({"role": "user", "content": qp})
+                    with st.spinner("Thinking..."):
+                        reply = ai_chat(st.session_state.chat_history, anthropic_key)
+                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+
+        st.markdown('<hr/>', unsafe_allow_html=True)
+        section_header("Conversation")
+
+        # Render chat history
+        for msg in st.session_state.chat_history:
+            if msg["role"] == "user":
+                st.markdown(
+                    '<div style="background:#0038A8;border-radius:4px;padding:0.7rem 1rem;'
+                    'margin-bottom:0.5rem;font-size:0.85rem;color:#FFF8DC;line-height:1.8;">'
+                    '<span style="font-size:0.6rem;color:#F5E17A;opacity:0.7;letter-spacing:0.1em;">YOU</span><br>'
+                    + msg["content"].replace("<","&lt;").replace(">","&gt;")
+                    + '</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    '<div style="background:#0A1628;border:1px solid #D4AF37;border-left:4px solid #D4AF37;'
+                    'border-radius:4px;padding:0.9rem 1.1rem;margin-bottom:0.8rem;'
+                    'font-size:0.85rem;color:#FFF8DC;line-height:1.95;white-space:pre-wrap;">'
+                    '<span style="font-size:0.6rem;color:#D4AF37;letter-spacing:0.1em;">AI SCHOLAR</span><br><br>'
+                    + msg["content"].replace("<","&lt;").replace(">","&gt;")
+                    + '</div>', unsafe_allow_html=True)
+
+        # Input box
+        user_input = st.text_input(
+            "Ask a question",
+            placeholder="e.g. What does ἱλαστήριον mean in Romans 3:25 and how does it bear on the atonement debate?",
+            label_visibility="collapsed",
+            key="chat_input",
+        )
+        send_col, clear_col = st.columns([2, 1])
+        with send_col:
+            send_btn = st.button("SEND", use_container_width=True, key="send_btn")
+        with clear_col:
+            clear_btn = st.button("CLEAR CONVERSATION", use_container_width=True, key="clear_chat")
+
+        if send_btn and user_input.strip():
+            st.session_state.chat_history.append({"role": "user", "content": user_input.strip()})
+            with st.spinner("Thinking..."):
+                reply = ai_chat(st.session_state.chat_history, anthropic_key)
+            st.session_state.chat_history.append({"role": "assistant", "content": reply})
+            st.rerun()
+
+        if clear_btn:
+            st.session_state.chat_history = []
+            st.rerun()
+
+        # Token usage estimate
+        if st.session_state.chat_history:
+            total_chars = sum(len(m["content"]) for m in st.session_state.chat_history)
+            est_tokens  = total_chars // 4
+            st.markdown(
+                f'<div style="font-size:0.62rem;color:#F5E17A;opacity:0.35;margin-top:0.5rem;">'
+                f'Estimated tokens in conversation: ~{est_tokens:,} · '
+                f'Messages: {len(st.session_state.chat_history)}'
+                f'</div>', unsafe_allow_html=True)
