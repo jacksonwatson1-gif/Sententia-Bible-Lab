@@ -37,195 +37,184 @@ CREAM           = "#FFF8DC"
 # ─────────────────────────────────────────────
 # GLOBAL CSS
 # ─────────────────────────────────────────────
+# ── Inject Google Fonts via a <link> tag (works on Streamlit Cloud, @import does not) ──
+st.markdown(
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;600&display=swap" rel="stylesheet">',
+    unsafe_allow_html=True,
+)
+
+# ── Override Streamlit default styles ──
+# Uses data-testid selectors + !important overrides that survive Streamlit's shadow DOM
 st.markdown(f"""
 <style>
-/* ── Google Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;600&display=swap');
-
-/* ── Root reset ── */
-html, body, [class*="css"] {{
-    font-family: 'IBM Plex Mono', monospace;
-    background-color: {BIBLICAL_BLUE};
-    color: {PURE_GOLD};
+/* ── Main app background ── */
+.stApp {{
+    background-color: {NAVY} !important;
+}}
+.stApp > header {{
+    background-color: {NAVY} !important;
 }}
 
-/* ── Main container ── */
-.main .block-container {{
-    background-color: {BIBLICAL_BLUE};
-    padding-top: 1rem;
-    max-width: 1400px;
+/* ── Main block container ── */
+[data-testid="stAppViewContainer"] {{
+    background-color: {NAVY} !important;
+}}
+[data-testid="block-container"] {{
+    background-color: {NAVY} !important;
+    padding-top: 1.5rem !important;
+    max-width: 1400px !important;
 }}
 
 /* ── Sidebar ── */
-section[data-testid="stSidebar"] {{
-    background: linear-gradient(180deg, {NAVY} 0%, {BIBLICAL_BLUE} 100%);
-    border-right: 2px solid {PURE_GOLD};
+[data-testid="stSidebar"] {{
+    background: linear-gradient(180deg, {NAVY} 0%, {BIBLICAL_BLUE} 100%) !important;
+    border-right: 2px solid {PURE_GOLD} !important;
 }}
-section[data-testid="stSidebar"] * {{
+[data-testid="stSidebar"] * {{
     color: {PURE_GOLD} !important;
-    font-family: 'IBM Plex Mono', monospace !important;
+}}
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stSlider label {{
+    color: {PURE_GOLD} !important;
 }}
 
-/* ── Title ── */
-.sbl-title {{
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 3.2rem;
+/* ── All text defaults ── */
+body, .stMarkdown, p, span, div {{
     color: {PURE_GOLD};
-    text-shadow: 0 0 18px {PURE_GOLD}aa, 0 0 35px {PURE_GOLD}55;
-    letter-spacing: 0.08em;
-    margin-bottom: 0;
-    line-height: 1;
-}}
-.sbl-subtitle {{
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.82rem;
-    color: {LIGHT_GOLD};
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    margin-top: 0.2rem;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
 }}
 
-/* ── Tab bar ── */
-button[data-baseweb="tab"] {{
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {{
+    background-color: {NAVY} !important;
+    border-bottom: 1px solid {PURE_GOLD}44 !important;
+    gap: 4px;
+}}
+.stTabs [data-baseweb="tab"] {{
+    background-color: {NAVY} !important;
+    color: {LIGHT_GOLD} !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.78rem !important;
-    color: {LIGHT_GOLD} !important;
-    background: transparent !important;
-    border-bottom: 2px solid transparent !important;
-    transition: all 0.25s ease !important;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em !important;
+    border-radius: 4px 4px 0 0 !important;
+    padding: 8px 16px !important;
+    border: 1px solid {PURE_GOLD}22 !important;
+    border-bottom: none !important;
+    transition: all 0.2s ease !important;
 }}
-button[data-baseweb="tab"]:hover {{
+.stTabs [data-baseweb="tab"]:hover {{
     color: {PURE_GOLD} !important;
-    text-shadow: 0 0 12px {PURE_GOLD}, 0 0 25px {PURE_GOLD}88;
-    border-bottom: 2px solid {PURE_GOLD} !important;
+    background-color: {BIBLICAL_BLUE} !important;
+    border-color: {PURE_GOLD}66 !important;
+    box-shadow: 0 0 12px {PURE_GOLD}44 !important;
 }}
-button[data-baseweb="tab"][aria-selected="true"] {{
+.stTabs [aria-selected="true"] {{
+    background-color: {TYRIAN_PURPLE} !important;
     color: {PURE_GOLD} !important;
-    text-shadow: 0 0 14px {PURE_GOLD}, 0 0 30px {PURE_GOLD}99;
-    border-bottom: 2px solid {PURE_GOLD} !important;
-    background: {TYRIAN_PURPLE}44 !important;
+    border-color: {PURE_GOLD} !important;
+    box-shadow: 0 0 18px {PURE_GOLD}55 !important;
+    font-weight: 600 !important;
 }}
-
-/* ── Cards ── */
-.sbl-card {{
-    background: linear-gradient(135deg, {NAVY}cc 0%, #001560cc 100%);
-    border: 1px solid {PURE_GOLD}66;
-    border-radius: 6px;
-    padding: 1.2rem 1.5rem;
-    margin-bottom: 1rem;
-    box-shadow: 0 0 20px {PURE_GOLD}22;
-}}
-.sbl-card-scarlet {{
-    border-color: {SCARLET};
-    box-shadow: 0 0 20px {SCARLET}33;
-}}
-.sbl-card-purple {{
-    border-color: {TYRIAN_PURPLE};
-    box-shadow: 0 0 20px {TYRIAN_PURPLE}55;
-}}
-
-/* ── Section headers ── */
-.sbl-section {{
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 1.4rem;
-    color: {PURE_GOLD};
-    letter-spacing: 0.1em;
-    border-bottom: 1px solid {PURE_GOLD}55;
-    padding-bottom: 0.3rem;
-    margin-top: 1.2rem;
-    margin-bottom: 0.8rem;
-}}
-
-/* ── Scripture text ── */
-.scripture-text {{
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.95rem;
-    line-height: 1.9;
-    color: {CREAM};
-    background: {NAVY}cc;
-    border-left: 3px solid {PURE_GOLD};
-    padding: 1rem 1.2rem;
-    border-radius: 4px;
-}}
-.scripture-verse-num {{
-    color: {SCARLET};
-    font-weight: 600;
-    font-size: 0.78rem;
-}}
-
-/* ── Keyword badges (Discovery mode) ── */
-.sbl-keyword {{
-    display: inline-block;
-    background: {TYRIAN_PURPLE};
-    color: {PURE_GOLD};
-    font-size: 0.72rem;
-    font-family: 'IBM Plex Mono', monospace;
-    padding: 2px 8px;
-    border-radius: 3px;
-    border: 1px solid {PURE_GOLD}88;
-    margin: 2px;
-    cursor: help;
-}}
-
-/* ── Metrics ── */
-[data-testid="metric-container"] {{
-    background: {NAVY}cc;
-    border: 1px solid {PURE_GOLD}44;
-    border-radius: 5px;
-    padding: 0.5rem;
-}}
-[data-testid="metric-container"] label {{
-    color: {LIGHT_GOLD} !important;
-    font-size: 0.7rem !important;
-}}
-[data-testid="metric-container"] [data-testid="stMetricValue"] {{
-    color: {PURE_GOLD} !important;
-    font-size: 1.4rem !important;
+.stTabs [data-baseweb="tab-panel"] {{
+    background-color: {NAVY} !important;
+    padding-top: 1rem !important;
 }}
 
 /* ── Inputs ── */
-.stTextInput input, .stSelectbox select {{
-    background: {NAVY} !important;
+.stTextInput input {{
+    background-color: {BIBLICAL_BLUE} !important;
     color: {PURE_GOLD} !important;
-    border: 1px solid {PURE_GOLD}55 !important;
+    border: 1px solid {PURE_GOLD}66 !important;
+    border-radius: 4px !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.9rem !important;
+}}
+.stTextInput input:focus {{
+    border-color: {PURE_GOLD} !important;
+    box-shadow: 0 0 8px {PURE_GOLD}44 !important;
+}}
+.stSelectbox > div > div {{
+    background-color: {BIBLICAL_BLUE} !important;
+    color: {PURE_GOLD} !important;
+    border: 1px solid {PURE_GOLD}66 !important;
     font-family: 'IBM Plex Mono', monospace !important;
 }}
+
+/* ── Buttons ── */
 .stButton > button {{
-    background: {TYRIAN_PURPLE} !important;
+    background-color: {TYRIAN_PURPLE} !important;
     color: {PURE_GOLD} !important;
     border: 1px solid {PURE_GOLD}88 !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.78rem !important;
-    letter-spacing: 0.1em;
-    transition: all 0.2s;
+    letter-spacing: 0.1em !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
 }}
 .stButton > button:hover {{
-    background: {PURE_GOLD} !important;
+    background-color: {PURE_GOLD} !important;
     color: {NAVY} !important;
-    box-shadow: 0 0 15px {PURE_GOLD}88;
+    box-shadow: 0 0 15px {PURE_GOLD}88 !important;
+}}
+
+/* ── Metrics ── */
+[data-testid="metric-container"] {{
+    background-color: {BIBLICAL_BLUE} !important;
+    border: 1px solid {PURE_GOLD}44 !important;
+    border-radius: 6px !important;
+    padding: 0.75rem !important;
+}}
+[data-testid="metric-container"] label {{
+    color: {LIGHT_GOLD} !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.72rem !important;
+}}
+[data-testid="stMetricValue"] {{
+    color: {PURE_GOLD} !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 1.6rem !important;
+    font-weight: 600 !important;
 }}
 
 /* ── Slider ── */
-.stSlider [data-testid="stSlider"] {{
-    color: {PURE_GOLD};
+[data-testid="stSlider"] > div {{
+    color: {PURE_GOLD} !important;
+}}
+.stSlider [data-baseweb="slider"] [data-testid="stThumbValue"] {{
+    color: {NAVY} !important;
+    background: {PURE_GOLD} !important;
+}}
+
+/* ── Dataframe / tables ── */
+[data-testid="stDataFrame"] {{
+    border: 1px solid {PURE_GOLD}44 !important;
+    border-radius: 4px !important;
+}}
+
+/* ── Spinner ── */
+.stSpinner > div {{
+    border-top-color: {PURE_GOLD} !important;
+}}
+
+/* ── Horizontal rule ── */
+hr {{
+    border-color: {PURE_GOLD}44 !important;
 }}
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+::-webkit-scrollbar {{ width: 5px; height: 5px; }}
 ::-webkit-scrollbar-track {{ background: {NAVY}; }}
 ::-webkit-scrollbar-thumb {{ background: {PURE_GOLD}66; border-radius: 3px; }}
 
-/* ── Divider ── */
-hr {{ border-color: {PURE_GOLD}44 !important; }}
-
-/* ── Mobile responsive ── */
+/* ── Mobile ── */
 @media (max-width: 768px) {{
-    .sbl-title {{ font-size: 2rem; }}
-    .main .block-container {{ padding: 0.5rem; }}
+    [data-testid="block-container"] {{ padding: 0.5rem !important; }}
 }}
 </style>
 """, unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────
 # DATA STORES
@@ -391,11 +380,45 @@ def fetch_scripture(reference: str, translation: str = "kjv") -> dict:
 # ─────────────────────────────────────────────
 
 def card(content_html: str, variant: str = ""):
-    cls = f"sbl-card sbl-card-{variant}" if variant else "sbl-card"
-    st.markdown(f'<div class="{cls}">{content_html}</div>', unsafe_allow_html=True)
+    """Render a styled card using fully inline styles — no external CSS classes needed."""
+    border_color = {
+        "scarlet": "#B22222",
+        "purple":  "#66023C",
+        "":        "#D4AF3766",
+    }.get(variant, "#D4AF3766")
+    shadow_color = {
+        "scarlet": "rgba(178,34,34,0.25)",
+        "purple":  "rgba(102,2,60,0.35)",
+        "":        "rgba(212,175,55,0.15)",
+    }.get(variant, "rgba(212,175,55,0.15)")
+    st.markdown(
+        f'''<div style="
+            background:linear-gradient(135deg,#0A1628ee 0%,#001560cc 100%);
+            border:1px solid {border_color};
+            border-radius:6px;
+            padding:1rem 1.25rem;
+            margin-bottom:0.8rem;
+            box-shadow:0 0 18px {shadow_color};
+            font-family:'IBM Plex Mono','Courier New',monospace;
+        ">{content_html}</div>''',
+        unsafe_allow_html=True,
+    )
 
 def section_header(title: str):
-    st.markdown(f'<div class="sbl-section">{title}</div>', unsafe_allow_html=True)
+    """Render a gold section header — fully inline."""
+    st.markdown(
+        f'''<div style="
+            font-family:'Bebas Neue','Arial Narrow',sans-serif;
+            font-size:1.25rem;
+            color:#D4AF37;
+            letter-spacing:0.12em;
+            border-bottom:1px solid #D4AF3755;
+            padding-bottom:0.3rem;
+            margin-top:1rem;
+            margin-bottom:0.7rem;
+        ">{title}</div>''',
+        unsafe_allow_html=True,
+    )
 
 def render_scripture_pane(data: dict, depth: int):
     if "error" in data and not data.get("verses"):
@@ -415,7 +438,7 @@ def render_scripture_pane(data: dict, depth: int):
     for v in verses:
         num = v.get("verse", "")
         text = v.get("text", "").strip()
-        verse_html += f'<span class="scripture-verse-num">[{num}]</span> {text} '
+        verse_html += f'<span style="color:#B22222;font-weight:600;font-size:0.78rem;">[{num}]</span> {text} '
 
     if depth == 1:
         # Discovery mode: highlight spy codewords
@@ -424,11 +447,24 @@ def render_scripture_pane(data: dict, depth: int):
                 import re
                 verse_html = re.sub(
                     f"(?i)({word})",
-                    f'<span class="sbl-keyword" title="{meaning}">\\1 🔍</span>',
+                    f'<span style="display:inline-block;background:#66023C;color:#D4AF37;font-size:0.72rem;padding:1px 7px;border-radius:3px;border:1px solid #D4AF3788;cursor:help;" title="{meaning}">\\1 🔍</span>',
                     verse_html
                 )
 
-    st.markdown(f'<div class="scripture-text">{verse_html}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'''<div style="
+            font-family:'IBM Plex Mono','Courier New',monospace;
+            font-size:0.93rem;
+            line-height:1.9;
+            color:#FFF8DC;
+            background:#0A1628cc;
+            border-left:3px solid #D4AF37;
+            padding:1rem 1.2rem;
+            border-radius:4px;
+            margin-top:0.5rem;
+        ">{verse_html}</div>''',
+        unsafe_allow_html=True,
+    )
 
 def render_sententia_sidebar(ref: str, depth: int):
     section_header("SENTENTIA // Academic Judgment")
@@ -777,7 +813,7 @@ with st.sidebar:
     st.markdown(f"""
         <div style="text-align:center;padding:1rem 0 0.5rem">
             <div style="font-size:2rem">✝️</div>
-            <div style="font-family:'Bebas Neue';font-size:1.6rem;color:{PURE_GOLD};
+            <div style="font-family:'Bebas Neue','Arial Narrow',sans-serif;font-size:1.6rem;color:{PURE_GOLD};
                         text-shadow:0 0 15px {PURE_GOLD}88;letter-spacing:0.1em">
                 SENTENTIA<br>BIBLE LAB
             </div>
@@ -806,7 +842,7 @@ with st.sidebar:
     st.markdown(f'<hr style="border-color:{PURE_GOLD}44;margin:0.8rem 0"/>', unsafe_allow_html=True)
     if depth == 1:
         st.markdown(f"""
-            <div class="sbl-card">
+            <div style="background:linear-gradient(135deg,#0A1628ee 0%,#001560cc 100%);border:1px solid #D4AF3766;border-radius:6px;padding:0.8rem 1rem;margin-bottom:0.6rem;">
                 <div style="font-size:0.68rem;color:{PURE_GOLD};letter-spacing:0.1em;margin-bottom:0.4rem">
                 🕵️ SPY CODEBOOK ACTIVE
                 </div>
@@ -817,7 +853,7 @@ with st.sidebar:
         """, unsafe_allow_html=True)
     else:
         st.markdown(f"""
-            <div class="sbl-card sbl-card-purple">
+            <div style="background:linear-gradient(135deg,#0A1628ee 0%,#001560cc 100%);border:1px solid #66023C;border-radius:6px;padding:0.8rem 1rem;margin-bottom:0.6rem;box-shadow:0 0 18px rgba(102,2,60,0.35);">
                 <div style="font-size:0.68rem;color:{PURE_GOLD};letter-spacing:0.1em;margin-bottom:0.4rem">
                 📚 SCHOLAR RESOURCES ACTIVE
                 </div>
@@ -834,9 +870,23 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 
 st.markdown(f"""
-    <div style="text-align:center;padding:1rem 0 0.5rem">
-        <div class="sbl-title">SENTENTIA BIBLE LAB</div>
-        <div class="sbl-subtitle">Christian Apologetics Codex // Sola Scriptura</div>
+    <div style="text-align:center;padding:1.2rem 0 0.5rem">
+        <div style="
+            font-family:'Bebas Neue','Arial Narrow',sans-serif;
+            font-size:3rem;
+            color:{PURE_GOLD};
+            text-shadow:0 0 20px {PURE_GOLD}99,0 0 40px {PURE_GOLD}44;
+            letter-spacing:0.1em;
+            line-height:1;
+        ">SENTENTIA BIBLE LAB</div>
+        <div style="
+            font-family:'IBM Plex Mono','Courier New',monospace;
+            font-size:0.75rem;
+            color:{LIGHT_GOLD};
+            letter-spacing:0.22em;
+            text-transform:uppercase;
+            margin-top:0.3rem;
+        ">Christian Apologetics Codex // Sola Scriptura</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -931,7 +981,7 @@ with tab1:
                 "Hebrews 11:1": ["2 Cor 5:7", "Rom 8:24", "Heb 11:3", "Gal 5:5"],
             }
             refs = tsk_refs.get(scripture_ref.strip(), ["See Strong's for cross-reference data"])
-            refs_html = "".join([f'<span class="sbl-keyword">{r}</span> ' for r in refs])
+            refs_html = "".join([f'<span style="display:inline-block;background:#66023C;color:#D4AF37;font-size:0.72rem;padding:2px 8px;border-radius:3px;border:1px solid #D4AF3788;margin:2px;">{r}</span> ' for r in refs])
             card(f"""
                 <div style="font-size:0.65rem;color:{LIGHT_GOLD};margin-bottom:0.5rem">
                 TREASURY OF SCRIPTURE KNOWLEDGE
