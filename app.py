@@ -18,7 +18,7 @@ from datetime import datetime
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Sententia Bible Lab",
-    page_icon="✡",
+    page_icon="✝️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -487,31 +487,37 @@ def build_manuscript_chart():
     ]).sort_values("Manuscripts", ascending=True)
 
     fig = go.Figure()
-    colors = [SCARLET if "New Testament" in w else PURE_GOLD for w in df["Work"]]
+    GOLD  = "#D4AF37"
+    SCAR  = "#B22222"
+    NVY   = "#0A1628"
+    BLUE  = "#0038A8"
+    GGRID = "rgba(212,175,55,0.10)"
+
+    colors = [SCAR if "New Testament" in w else GOLD for w in df["Work"]]
 
     fig.add_trace(go.Bar(
         y=df["Work"],
         x=df["Manuscripts"],
         orientation='h',
         marker_color=colors,
-        marker_line_color=NAVY,
+        marker_line_color=NVY,
         marker_line_width=1,
         text=[f"{v:,}" for v in df["Manuscripts"]],
         textposition='outside',
-        textfont=dict(color=PURE_GOLD, size=11, family="IBM Plex Mono"),
+        textfont=dict(color=GOLD, size=11, family="monospace"),
         hovertemplate="<b>%{y}</b><br>Manuscripts: %{x:,}<extra></extra>",
     ))
 
     fig.update_layout(
-        title=dict(text="Manuscript Attestation: NT vs. Classical Antiquity",
-                   font=dict(family="Bebas Neue", size=20, color=PURE_GOLD), x=0.5),
-        plot_bgcolor=NAVY,
-        paper_bgcolor=BIBLICAL_BLUE,
-        font=dict(family="IBM Plex Mono", color=PURE_GOLD),
-        xaxis=dict(title="Total Extant Manuscripts", gridcolor=f"{PURE_GOLD}22",
-                   color=PURE_GOLD, tickfont=dict(size=10)),
-        yaxis=dict(gridcolor="transparent", color=PURE_GOLD, tickfont=dict(size=10)),
-        margin=dict(l=10, r=80, t=60, b=40),
+        title={"text": "Manuscript Attestation: NT vs. Classical Antiquity",
+               "font": {"family": "sans-serif", "size": 20, "color": GOLD}, "x": 0.5},
+        plot_bgcolor=NVY,
+        paper_bgcolor=BLUE,
+        font={"family": "monospace", "color": GOLD},
+        xaxis={"title": "Total Extant Manuscripts", "gridcolor": GGRID,
+               "color": GOLD, "tickfont": {"size": 10}},
+        yaxis={"gridcolor": "transparent", "color": GOLD, "tickfont": {"size": 10}},
+        margin={"l": 10, "r": 80, "t": 60, "b": 40},
         height=380,
     )
     return fig
@@ -532,15 +538,19 @@ def build_cross_ref_heatmap():
         textfont=dict(family="IBM Plex Mono", size=11),
         hovertemplate="<b>%{y}</b> → <b>%{x}</b><br>References: %{z}<extra></extra>",
     ))
+    GOLD = "#D4AF37"
+    NVY  = "#0A1628"
+    BLUE = "#0038A8"
+
     fig.update_layout(
-        title=dict(text="NT Citation Density of OT Books",
-                   font=dict(family="Bebas Neue", size=20, color=PURE_GOLD), x=0.5),
-        plot_bgcolor=NAVY,
-        paper_bgcolor=BIBLICAL_BLUE,
-        font=dict(family="IBM Plex Mono", color=PURE_GOLD),
-        xaxis=dict(title="Old Testament Book", color=PURE_GOLD, tickfont=dict(size=10)),
-        yaxis=dict(title="New Testament Book", color=PURE_GOLD, tickfont=dict(size=10)),
-        margin=dict(l=20, r=20, t=60, b=40),
+        title={"text": "NT Citation Density of OT Books",
+               "font": {"family": "sans-serif", "size": 20, "color": GOLD}, "x": 0.5},
+        plot_bgcolor=NVY,
+        paper_bgcolor=BLUE,
+        font={"family": "monospace", "color": GOLD},
+        xaxis={"title": "Old Testament Book", "color": GOLD, "tickfont": {"size": 10}},
+        yaxis={"title": "New Testament Book", "color": GOLD, "tickfont": {"size": 10}},
+        margin={"l": 20, "r": 20, "t": 60, "b": 40},
         height=380,
     )
     return fig
@@ -563,55 +573,110 @@ def build_theme_heatmap():
         showscale=True,
         hovertemplate="Theme: <b>%{y}</b><br>Book: <b>%{x}</b><br>Frequency Score: %{z}<extra></extra>",
     ))
+    GOLD = "#D4AF37"
+    NVY  = "#0A1628"
+    BLUE = "#0038A8"
+
     fig.update_layout(
-        title=dict(text="Theological Theme Intensity Across Scripture",
-                   font=dict(family="Bebas Neue", size=20, color=PURE_GOLD), x=0.5),
-        plot_bgcolor=NAVY,
-        paper_bgcolor=BIBLICAL_BLUE,
-        font=dict(family="IBM Plex Mono", color=PURE_GOLD),
-        xaxis=dict(color=PURE_GOLD, tickfont=dict(size=9), tickangle=-35),
-        yaxis=dict(color=PURE_GOLD, tickfont=dict(size=10)),
-        margin=dict(l=20, r=20, t=60, b=80),
+        title={"text": "Theological Theme Intensity Across Scripture",
+               "font": {"family": "sans-serif", "size": 20, "color": GOLD}, "x": 0.5},
+        plot_bgcolor=NVY,
+        paper_bgcolor=BLUE,
+        font={"family": "monospace", "color": GOLD},
+        xaxis={"color": GOLD, "tickfont": {"size": 9}, "tickangle": -35},
+        yaxis={"color": GOLD, "tickfont": {"size": 10}},
+        margin={"l": 20, "r": 20, "t": 60, "b": 80},
         height=380,
     )
     return fig
 
 def build_word_freq_chart(text: str, title: str = "Word Frequency Analysis"):
-    if not text:
-        return None
+    """
+    Build a word-frequency bar chart from scripture text.
+    Guards: empty text, empty freq dict, zip-on-empty-sequence.
+    All Plotly color values are strict 6-digit hex or rgba() strings.
+    """
     import re
-    stop = {"the","and","of","a","in","to","is","he","that","his","for","they",
-            "i","it","my","me","be","not","with","this","but","who","was","are",
-            "him","her","they","you","your","we","our","shall","will","unto","thou",
-            "thee","hath","have","had","were","their","them","then","when","from",
-            "which","said","came","upon","into","him","all","one","an","so","by",
-            "at","or","if","do","no","up","as","he","she","out","its","did"}
+
+    # ── Guard: no text supplied ──
+    if not text or not text.strip():
+        return None
+
+    GOLD_STR   = "#D4AF37"   # PURE_GOLD  — explicit literals avoid f-string suffix bugs
+    SCARLET_STR= "#B22222"   # SCARLET
+    NAVY_STR   = "#0A1628"   # NAVY
+    BLUE_STR   = "#0038A8"   # BIBLICAL_BLUE
+    GRID_COLOR = "rgba(212,175,55,0.12)"  # PURE_GOLD @ 12% opacity — valid Plotly rgba
+
+    stop = {
+        "the","and","of","a","in","to","is","he","that","his","for","they",
+        "i","it","my","me","be","not","with","this","but","who","was","are",
+        "him","her","you","your","we","our","shall","will","unto","thou",
+        "thee","hath","have","had","were","their","them","then","when","from",
+        "which","said","came","upon","into","all","one","an","so","by",
+        "at","or","if","do","no","up","as","she","out","its","did","also",
+        "hast","doth","may","let","more","even","therefore","thus","every",
+    }
+
     words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-    freq = {}
+    freq: dict = {}
     for w in words:
         if w not in stop:
             freq[w] = freq.get(w, 0) + 1
+
+    if not freq:
+        return None
+
     top = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:20]
+
+    # ── Guard: zip requires non-empty sequence ──
     if not top:
         return None
-    words_out, counts = zip(*top)
 
-    fig = go.Figure(go.Bar(
-        x=list(words_out),
-        y=list(counts),
-        marker_color=[SCARLET if c == max(counts) else PURE_GOLD for c in counts],
-        marker_line_color=NAVY,
-        marker_line_width=1,
-    ))
+    words_out, counts = zip(*top)
+    words_list  = list(words_out)
+    counts_list = list(counts)
+    max_count   = max(counts_list)
+
+    bar_colors = [SCARLET_STR if c == max_count else GOLD_STR for c in counts_list]
+
+    fig = go.Figure(
+        go.Bar(
+            x=words_list,
+            y=counts_list,
+            marker=dict(
+                color=bar_colors,
+                line=dict(color=NAVY_STR, width=1),
+            ),
+            hovertemplate="<b>%{x}</b><br>Count: %{y}<extra></extra>",
+        )
+    )
+
     fig.update_layout(
-        title=dict(text=title, font=dict(family="Bebas Neue", size=18, color=PURE_GOLD), x=0.5),
-        plot_bgcolor=NAVY,
-        paper_bgcolor=BIBLICAL_BLUE,
-        font=dict(family="IBM Plex Mono", color=PURE_GOLD),
-        xaxis=dict(color=PURE_GOLD, tickfont=dict(size=9), tickangle=-40),
-        yaxis=dict(color=PURE_GOLD, gridcolor=f"{PURE_GOLD}22"),
-        margin=dict(l=20, r=20, t=50, b=80),
-        height=320,
+        title={
+            "text": title,
+            "x": 0.5,
+            "xanchor": "center",
+            "font": {"family": "sans-serif", "size": 18, "color": GOLD_STR},
+        },
+        plot_bgcolor=NAVY_STR,
+        paper_bgcolor=BLUE_STR,
+        font={"family": "monospace", "color": GOLD_STR, "size": 11},
+        xaxis={
+            "color": GOLD_STR,
+            "tickfont": {"size": 9, "color": GOLD_STR},
+            "tickangle": -40,
+            "gridcolor": GRID_COLOR,
+            "linecolor": GOLD_STR,
+        },
+        yaxis={
+            "color": GOLD_STR,
+            "tickfont": {"size": 9, "color": GOLD_STR},
+            "gridcolor": GRID_COLOR,
+            "linecolor": GOLD_STR,
+        },
+        margin={"l": 20, "r": 20, "t": 55, "b": 90},
+        height=340,
     )
     return fig
 
@@ -660,13 +725,13 @@ def render_timeline():
 with st.sidebar:
     st.markdown(f"""
         <div style="text-align:center;padding:1rem 0 0.5rem">
-            <div style="font-size:2rem">✡</div>
+            <div style="font-size:2rem">✝️</div>
             <div style="font-family:'Bebas Neue';font-size:1.6rem;color:{PURE_GOLD};
                         text-shadow:0 0 15px {PURE_GOLD}88;letter-spacing:0.1em">
                 SENTENTIA<br>BIBLE LAB
             </div>
             <div style="font-size:0.62rem;color:{LIGHT_GOLD};letter-spacing:0.2em">
-                RESEARCH WORKSTATION v1.0
+                CHRISTIAN APOLOGETICS CODEX v1.0
             </div>
         </div>
         <hr style="border-color:{PURE_GOLD}44;margin:0.5rem 0"/>
@@ -720,13 +785,13 @@ with st.sidebar:
 st.markdown(f"""
     <div style="text-align:center;padding:1rem 0 0.5rem">
         <div class="sbl-title">SENTENTIA BIBLE LAB</div>
-        <div class="sbl-subtitle">Biblical Research Workstation // Sola Scriptura</div>
+        <div class="sbl-subtitle">Christian Apologetics Codex // Sola Scriptura</div>
     </div>
 """, unsafe_allow_html=True)
 
 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
 with col_m1:
-    st.metric("📜 Canonical Books", "66")
+    st.metric("✝️ Canonical Books", "66")
 with col_m2:
     st.metric("✍️ NT Manuscripts", "5,856")
 with col_m3:
@@ -741,11 +806,11 @@ st.markdown('<hr/>', unsafe_allow_html=True)
 # ─────────────────────────────────────────────
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📜 Scripture Lab",
+    "📖 Scripture Lab",
     "📊 Theology Analytics",
     "⏳ Historical Timeline",
     "🌳 Lineage Graph",
-    "🛡️ Apologetics Toolbox",
+    "🏛️ Apologetics Toolbox",
 ])
 
 # ══════════════════════════════════════════════
@@ -844,13 +909,18 @@ with tab2:
             v.get("text","") for v in st.session_state.scripture_data["verses"]
         )
 
-    if scripture_text:
-        wf_fig = build_word_freq_chart(
-            scripture_text,
-            f"Word Frequency — {st.session_state.get('scripture_ref','')}"
-        )
-        if wf_fig:
-            st.plotly_chart(wf_fig, use_container_width=True)
+    if scripture_text and scripture_text.strip():
+        try:
+            wf_fig = build_word_freq_chart(
+                scripture_text,
+                f"Word Frequency — {st.session_state.get('scripture_ref', 'Selected Passage')}"
+            )
+            if wf_fig:
+                st.plotly_chart(wf_fig, use_container_width=True)
+            else:
+                card(f'<span style="color:{LIGHT_GOLD}88">Passage too short or contains only common words — try a longer reference.</span>')
+        except Exception as e:
+            card(f'<span style="color:{SCARLET}">⚠ Chart error: {e}</span>', "scarlet")
     else:
         card(f'<span style="color:{LIGHT_GOLD}88">Load a scripture passage in the Scripture Lab tab to enable word frequency analysis.</span>')
 
@@ -974,7 +1044,7 @@ with tab4:
 # TAB 5 — APOLOGETICS TOOLBOX
 # ══════════════════════════════════════════════
 with tab5:
-    section_header("🛡️ APOLOGETICS TOOLBOX")
+    section_header("🏛️ APOLOGETICS TOOLBOX")
 
     if depth == 1:
         card(f"""
@@ -1066,7 +1136,7 @@ with tab5:
 st.markdown(f"""
     <hr/>
     <div style="text-align:center;font-size:0.65rem;color:{LIGHT_GOLD}55;letter-spacing:0.15em;padding:0.5rem 0 1rem">
-    SENTENTIA BIBLE LAB // RESEARCH WORKSTATION v1.0<br>
+    SENTENTIA BIBLE LAB // CHRISTIAN APOLOGETICS CODEX v1.0<br>
     Scripture via bible-api.com · Scholarship: Brown, BKC, Walvoord-Zuck · Lexica: Strong's G/H, Dodson<br>
     Sola Scriptura · Sola Gratia · Solus Christus · Sola Fide · Soli Deo Gloria
     </div>
