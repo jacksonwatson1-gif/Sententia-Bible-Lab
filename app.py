@@ -335,22 +335,21 @@ hr{{
 /* ════════════════════════════════════════════
    PARCHMENT — SCHOLARLY BOX (spec-exact + enhanced)
    ════════════════════════════════════════════ */
-/* Update this specific section in your st.markdown CSS */
-.scholarly-box {
-    background-color: #fdfaf3 !important; /* Parchment white */
-    border-left: 5px solid #4a3728 !important;
-    padding: 25px !important;
-    border-radius: 8px !important;
-    font-family: 'serif' !important;
-    color: #1a1a1a !important; /* FORCE DARK CHARCOAL TEXT */
-    line-height: 1.6 !important;
-}
-
-/* Force all text inside the box (paragraphs, lists) to be dark */
-.scholarly-box p, .scholarly-box li, .scholarly-box div {
-    color: #1a1a1a !important;
-    font-size: 1.1rem !important;
-}
+.scholarly-box{{
+    background-color:{PARCHMENT};
+    background-image:
+        linear-gradient(180deg,rgba(253,250,243,1) 0%,rgba(250,246,236,1) 100%);
+    border-left:5px solid {BROWN};
+    border-radius:0 6px 6px 0;
+    padding:1.5rem 1.8rem;
+    box-shadow:
+        0 2px 8px rgba(74,55,40,.12),
+        inset 0 0 0 1px rgba(74,55,40,.07);
+    font-family:'Crimson Text',Georgia,serif;
+    color:{INK};
+    line-height:1.95;
+    font-size:1.06rem;
+}}
 .scholarly-box h2{{
     font-family:'Playfair Display',Georgia,serif;
     color:{BROWN};
