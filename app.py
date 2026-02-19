@@ -11,7 +11,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 import json
-import graphviz
 from datetime import datetime
 
 # ─────────────────────────────────────────────
@@ -616,53 +615,6 @@ def build_word_freq_chart(text: str, title: str = "Word Frequency Analysis"):
     )
     return fig
 
-def build_genealogy_graph(focus: str = "Full Lineage"):
-    g = graphviz.Digraph(
-        "Abraham_to_Christ",
-        comment="Messianic Genealogy — Matthew 1",
-    )
-    g.attr(
-        rankdir="TB",
-        bgcolor=NAVY,
-        fontname="IBM Plex Mono",
-        fontcolor=PURE_GOLD,
-        pad="0.5",
-        nodesep="0.4",
-        ranksep="0.6",
-    )
-    g.attr('node', shape='box', style='filled,rounded',
-           fillcolor=BIBLICAL_BLUE, color=PURE_GOLD, fontcolor=PURE_GOLD,
-           fontname="IBM Plex Mono", fontsize="10")
-    g.attr('edge', color=PURE_GOLD + "99", arrowhead='open', arrowsize='0.7')
-
-    # Key figures get special styling
-    patriarchs = {"Abraham", "Isaac", "Jacob", "Judah", "David", "Solomon", "Jesus of Nazareth"}
-    women = {"Sarah", "Rebekah", "Leah", "Tamar", "Rahab", "Ruth", "Bathsheba", "Mary"}
-
-    for name, _ in GENEALOGY_DATA["nodes"]:
-        if focus != "Full Lineage":
-            if focus == "Patriarchs" and name not in patriarchs and name not in women:
-                continue
-        if name == "Jesus of Nazareth":
-            g.node(name, fillcolor=PURE_GOLD, fontcolor=NAVY, color=PURE_GOLD,
-                   penwidth='3', fontsize="12")
-        elif name in patriarchs:
-            g.node(name, fillcolor=TYRIAN_PURPLE, fontcolor=PURE_GOLD)
-        elif name in women:
-            g.node(name, fillcolor=SCARLET + "88", fontcolor=CREAM)
-        else:
-            g.node(name)
-
-    for src, dst in GENEALOGY_DATA["edges"]:
-        if focus == "Patriarchs":
-            if src not in patriarchs and src not in women:
-                continue
-            if dst not in patriarchs and dst not in women:
-                continue
-        g.edge(src, dst)
-
-    return g
-
 def render_timeline():
     """Render timeline using HTML/JS vis-timeline."""
     items_json = json.dumps(TIMELINE_EVENTS)
@@ -1015,8 +967,8 @@ with tab4:
 
     with col_g1:
         with st.spinner("Rendering genealogy graph..."):
-            g = build_genealogy_graph(focus)
-        st.graphviz_chart(g.source, use_container_width=True)
+            dot_src = build_genealogy_dot(focus)
+        st.graphviz_chart(dot_src, use_container_width=True)
 
 # ══════════════════════════════════════════════
 # TAB 5 — APOLOGETICS TOOLBOX
