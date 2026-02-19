@@ -55,7 +55,7 @@ st.markdown(f"""
 }}
 [data-testid="stSidebar"] {{
     background: linear-gradient(175deg, {NAVY} 0%, #0a1f50 100%) !important;
-    border-right: 1px solid {PURE_GOLD}55 !important;
+    border-right: 1px solid rgba(212,175,55,0.333) !important;
 }}
 [data-testid="stSidebar"] * {{ color: {PURE_GOLD} !important; }}
 body, .stMarkdown, p, span, div {{
@@ -64,12 +64,12 @@ body, .stMarkdown, p, span, div {{
 }}
 .stTabs [data-baseweb="tab-list"] {{
     background-color: {NAVY} !important;
-    border-bottom: 1px solid {PURE_GOLD}33 !important;
+    border-bottom: 1px solid rgba(212,175,55,0.2) !important;
     gap: 2px;
 }}
 .stTabs [data-baseweb="tab"] {{
     background-color: transparent !important;
-    color: {LIGHT_GOLD}99 !important;
+    color: rgba(245,225,122,0.6) !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.73rem !important;
     letter-spacing: 0.1em !important;
@@ -79,7 +79,7 @@ body, .stMarkdown, p, span, div {{
 }}
 .stTabs [data-baseweb="tab"]:hover {{
     color: {PURE_GOLD} !important;
-    border-bottom: 2px solid {PURE_GOLD}66 !important;
+    border-bottom: 2px solid rgba(212,175,55,0.4) !important;
 }}
 .stTabs [aria-selected="true"] {{
     color: {PURE_GOLD} !important;
@@ -91,27 +91,27 @@ body, .stMarkdown, p, span, div {{
     padding-top: 1.2rem !important;
 }}
 .stTextInput input {{
-    background-color: {BIBLICAL_BLUE}88 !important;
+    background-color: rgba(0,56,168,0.533) !important;
     color: {CREAM} !important;
-    border: 1px solid {PURE_GOLD}55 !important;
+    border: 1px solid rgba(212,175,55,0.333) !important;
     border-radius: 3px !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.88rem !important;
 }}
 .stTextInput input:focus {{
     border-color: {PURE_GOLD} !important;
-    box-shadow: 0 0 6px {PURE_GOLD}33 !important;
+    box-shadow: 0 0 6px rgba(212,175,55,0.2) !important;
 }}
 .stSelectbox > div > div {{
-    background-color: {BIBLICAL_BLUE}88 !important;
+    background-color: rgba(0,56,168,0.533) !important;
     color: {CREAM} !important;
-    border: 1px solid {PURE_GOLD}55 !important;
+    border: 1px solid rgba(212,175,55,0.333) !important;
     font-family: 'IBM Plex Mono', monospace !important;
 }}
 .stButton > button {{
     background-color: {TYRIAN_PURPLE} !important;
     color: {PURE_GOLD} !important;
-    border: 1px solid {PURE_GOLD}66 !important;
+    border: 1px solid rgba(212,175,55,0.4) !important;
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.72rem !important;
     letter-spacing: 0.12em !important;
@@ -123,13 +123,13 @@ body, .stMarkdown, p, span, div {{
     color: {NAVY} !important;
 }}
 [data-testid="metric-container"] {{
-    background-color: {BIBLICAL_BLUE}44 !important;
-    border: 1px solid {PURE_GOLD}33 !important;
+    background-color: rgba(0,56,168,0.267) !important;
+    border: 1px solid rgba(212,175,55,0.2) !important;
     border-radius: 4px !important;
     padding: 0.6rem 0.9rem !important;
 }}
 [data-testid="metric-container"] label {{
-    color: {LIGHT_GOLD}bb !important;
+    color: rgba(245,225,122,0.733) !important;
     font-size: 0.68rem !important;
     letter-spacing: 0.1em !important;
 }}
@@ -139,14 +139,14 @@ body, .stMarkdown, p, span, div {{
     font-weight: 600 !important;
 }}
 [data-testid="stDataFrame"] {{
-    border: 1px solid {PURE_GOLD}33 !important;
+    border: 1px solid rgba(212,175,55,0.2) !important;
     border-radius: 3px !important;
 }}
-hr {{ border-color: {PURE_GOLD}22 !important; margin: 1.2rem 0 !important; }}
+hr {{ border-color: rgba(212,175,55,0.133) !important; margin: 1.2rem 0 !important; }}
 ::-webkit-scrollbar {{ width: 4px; height: 4px; }}
 ::-webkit-scrollbar-track {{ background: {NAVY}; }}
-::-webkit-scrollbar-thumb {{ background: {PURE_GOLD}44; border-radius: 2px; }}
-.stExpander {{ border: 1px solid {PURE_GOLD}33 !important; border-radius: 4px !important; }}
+::-webkit-scrollbar-thumb {{ background: rgba(212,175,55,0.267); border-radius: 2px; }}
+.stExpander {{ border: 1px solid rgba(212,175,55,0.2) !important; border-radius: 4px !important; }}
 .stExpander summary {{ color: {PURE_GOLD} !important; font-family: 'IBM Plex Mono', monospace !important; }}
 </style>
 """, unsafe_allow_html=True)
@@ -157,14 +157,14 @@ hr {{ border-color: {PURE_GOLD}22 !important; margin: 1.2rem 0 !important; }}
 # ─────────────────────────────────────────────
 
 def section_header(title: str, sub: str = ""):
-    sub_html = f'<div style="font-size:0.68rem;color:{LIGHT_GOLD}88;letter-spacing:0.08em;margin-top:0.15rem;">{sub}</div>' if sub else ""
+    sub_html = f'<div style="font-size:0.68rem;color:rgba(245,225,122,0.533);letter-spacing:0.08em;margin-top:0.15rem;">{sub}</div>' if sub else ""
     st.markdown(f'''
         <div style="margin:1.2rem 0 0.7rem;">
             <div style="font-family:\'Playfair Display\',Georgia,serif;
                         font-size:1.1rem;font-weight:600;color:{PURE_GOLD};
                         letter-spacing:0.04em;line-height:1.2;">{title}</div>
             {sub_html}
-            <div style="height:1px;background:linear-gradient(90deg,{PURE_GOLD}55,transparent);margin-top:0.4rem;"></div>
+            <div style="height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.333),transparent);margin-top:0.4rem;"></div>
         </div>''', unsafe_allow_html=True)
 
 def card(html: str, accent: str = PURE_GOLD):
@@ -175,10 +175,10 @@ def card(html: str, accent: str = PURE_GOLD):
         unsafe_allow_html=True)
 
 def quote_card(text: str, attribution: str, ref: str = ""):
-    ref_html = f'<span style="color:{LIGHT_GOLD}77;font-size:0.72rem;"> — {ref}</span>' if ref else ""
+    ref_html = f'<span style="color:rgba(245,225,122,0.467);font-size:0.72rem;"> — {ref}</span>' if ref else ""
     st.markdown(f'''
-        <div style="background:linear-gradient(135deg,{NAVY},{BIBLICAL_BLUE}44);
-                    border:1px solid {PURE_GOLD}44;border-left:4px solid {PURE_GOLD};
+        <div style="background:linear-gradient(135deg,{NAVY},rgba(0,56,168,0.267));
+                    border:1px solid rgba(212,175,55,0.267);border-left:4px solid {PURE_GOLD};
                     border-radius:4px;padding:1rem 1.3rem;margin-bottom:0.9rem;">
             <div style="font-family:\'Playfair Display\',Georgia,serif;font-style:italic;
                         font-size:0.93rem;color:{CREAM};line-height:1.85;margin-bottom:0.5rem;">
@@ -190,7 +190,7 @@ def quote_card(text: str, attribution: str, ref: str = ""):
         </div>''', unsafe_allow_html=True)
 
 def tag(text: str, color: str = TYRIAN_PURPLE):
-    return f'<span style="display:inline-block;background:{color};color:{PURE_GOLD};font-size:0.68rem;padding:2px 9px;border-radius:2px;border:1px solid {PURE_GOLD}55;margin:2px;letter-spacing:0.06em;">{text}</span>'
+    return f'<span style="display:inline-block;background:{color};color:{PURE_GOLD};font-size:0.68rem;padding:2px 9px;border-radius:2px;border:1px solid rgba(212,175,55,0.333);margin:2px;letter-spacing:0.06em;">{text}</span>'
 
 
 # ─────────────────────────────────────────────
@@ -485,23 +485,23 @@ with st.sidebar:
                         letter-spacing:0.06em;line-height:1.2;">
                 Sententia Bible Lab
             </div>
-            <div style="font-size:0.58rem;color:{LIGHT_GOLD}88;letter-spacing:0.2em;margin-top:0.3rem">
+            <div style="font-size:0.58rem;color:rgba(245,225,122,0.533);letter-spacing:0.2em;margin-top:0.3rem">
                 CHRISTIAN APOLOGETICS CODEX
             </div>
         </div>
-        <div style="height:1px;background:linear-gradient(90deg,transparent,{PURE_GOLD}55,transparent);margin:0.3rem 0 1rem;"></div>
+        <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,0.333),transparent);margin:0.3rem 0 1rem;"></div>
     """, unsafe_allow_html=True)
 
-    st.markdown(f'<div style="font-size:0.65rem;color:{LIGHT_GOLD}99;letter-spacing:0.15em;margin-bottom:0.4rem">📖 TRANSLATION</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:0.65rem;color:rgba(245,225,122,0.6);letter-spacing:0.15em;margin-bottom:0.4rem">📖 TRANSLATION</div>', unsafe_allow_html=True)
     translation = st.selectbox("Translation", ["kjv", "web", "bbe"], index=0,
                                 label_visibility="collapsed",
                                 format_func=lambda x: {"kjv": "King James (KJV)",
                                                         "web": "World English (WEB)",
                                                         "bbe": "Basic English (BBE)"}[x])
 
-    st.markdown(f'<div style="height:1px;background:{PURE_GOLD}22;margin:1rem 0;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
 
-    st.markdown(f'<div style="font-size:0.65rem;color:{LIGHT_GOLD}99;letter-spacing:0.15em;margin-bottom:0.6rem">QUICK LOAD — CANONICAL PASSAGES</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:0.65rem;color:rgba(245,225,122,0.6);letter-spacing:0.15em;margin-bottom:0.6rem">QUICK LOAD — CANONICAL PASSAGES</div>', unsafe_allow_html=True)
     QUICK_REFS = {
         "John 3:16": "The Gospel in miniature",
         "Romans 8:28-39": "The golden chain of salvation",
@@ -519,8 +519,8 @@ with st.sidebar:
             st.session_state.quick_load_ref = ref
             st.session_state.quick_load_translation = translation
 
-    st.markdown(f'<div style="height:1px;background:{PURE_GOLD}22;margin:1rem 0;"></div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="font-size:0.58rem;color:{LIGHT_GOLD}44;text-align:center;line-height:1.8;">Sola Scriptura · Soli Deo Gloria<br>Solus Christus · Sola Gratia · Sola Fide</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:0.58rem;color:rgba(245,225,122,0.267);text-align:center;line-height:1.8;">Sola Scriptura · Soli Deo Gloria<br>Solus Christus · Sola Gratia · Sola Fide</div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
@@ -532,11 +532,11 @@ st.markdown(f"""
         <div style="font-family:'Playfair Display',Georgia,serif;
                     font-size:2.4rem;font-weight:600;color:{PURE_GOLD};
                     letter-spacing:0.05em;line-height:1.1;
-                    text-shadow:0 0 30px {PURE_GOLD}44;">
+                    text-shadow:0 0 30px rgba(212,175,55,0.267);">
             Sententia Bible Lab
         </div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;
-                    color:{LIGHT_GOLD}88;letter-spacing:0.2em;margin-top:0.3rem;">
+                    color:rgba(245,225,122,0.533);letter-spacing:0.2em;margin-top:0.3rem;">
             CHRISTIAN APOLOGETICS CODEX · GRADUATE RESEARCH WORKSTATION
         </div>
     </div>
@@ -608,7 +608,7 @@ with tab1:
             trans_name = sdata.get("translation_name", trans_default.upper())
 
             st.markdown(f'''
-                <div style="font-size:0.65rem;color:{LIGHT_GOLD}88;letter-spacing:0.12em;
+                <div style="font-size:0.65rem;color:rgba(245,225,122,0.533);letter-spacing:0.12em;
                             margin-bottom:0.6rem;">{ref_label.upper()} · {trans_name.upper()}</div>
             ''', unsafe_allow_html=True)
 
@@ -623,12 +623,12 @@ with tab1:
                 <div style="font-family:'IBM Plex Mono',monospace;font-size:0.88rem;
                             line-height:2;color:{CREAM};background:{NAVY};
                             border-left:3px solid {PURE_GOLD};padding:1rem 1.2rem;
-                            border-radius:3px;border:1px solid {PURE_GOLD}22;">
+                            border-radius:3px;border:1px solid rgba(212,175,55,0.133);">
                     {verse_html}
                 </div>''', unsafe_allow_html=True)
 
             # Parallel translations
-            st.markdown(f'<div style="height:1px;background:{PURE_GOLD}22;margin:1rem 0;"></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
             section_header("Parallel Translations")
             for alt_trans in ["kjv", "web", "bbe"]:
                 if alt_trans != trans_default:
@@ -651,20 +651,20 @@ with tab1:
         if matched:
             for term, entry in matched[:5]:
                 st.markdown(f'''
-                    <div style="background:{BIBLICAL_BLUE}33;border:1px solid {PURE_GOLD}33;
+                    <div style="background:rgba(0,56,168,0.2);border:1px solid rgba(212,175,55,0.2);
                                 border-left:3px solid {PURE_GOLD};border-radius:3px;
                                 padding:0.75rem 1rem;margin-bottom:0.6rem;">
-                        <div style="font-size:0.65rem;color:{LIGHT_GOLD}99;letter-spacing:0.1em;">
+                        <div style="font-size:0.65rem;color:rgba(245,225,122,0.6);letter-spacing:0.1em;">
                             {entry["num"]} · {entry["tr"]}
                         </div>
                         <div style="font-size:1.3rem;color:{CREAM};margin:0.2rem 0;">{entry["gk"]}</div>
                         <div style="font-size:0.78rem;color:{LIGHT_GOLD};line-height:1.7;">{entry["def"]}</div>
                     </div>''', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div style="font-size:0.78rem;color:{LIGHT_GOLD}66;">Load a passage containing tracked theological terms to activate lexical analysis.</div>',
+            st.markdown(f'<div style="font-size:0.78rem;color:rgba(245,225,122,0.4);">Load a passage containing tracked theological terms to activate lexical analysis.</div>',
                         unsafe_allow_html=True)
 
-        st.markdown(f'<div style="height:1px;background:{PURE_GOLD}22;margin:1rem 0;"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1rem 0;"></div>', unsafe_allow_html=True)
 
         # Cross-references
         section_header("Cross-References // TSK")
@@ -684,11 +684,11 @@ with tab1:
                     <div style="display:flex;align-items:baseline;gap:0.7rem;margin-bottom:0.4rem;">
                         <span style="background:{TYRIAN_PURPLE};color:{PURE_GOLD};font-size:0.68rem;
                                      padding:2px 9px;border-radius:2px;white-space:nowrap;
-                                     border:1px solid {PURE_GOLD}44;">{ref_v}</span>
-                        <span style="font-size:0.78rem;color:{LIGHT_GOLD}99;">{desc}</span>
+                                     border:1px solid rgba(212,175,55,0.267);">{ref_v}</span>
+                        <span style="font-size:0.78rem;color:rgba(245,225,122,0.6);">{desc}</span>
                     </div>''', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div style="font-size:0.78rem;color:{LIGHT_GOLD}66;">Cross-reference data available for the five key passages in Commentary Engine.</div>',
+            st.markdown(f'<div style="font-size:0.78rem;color:rgba(245,225,122,0.4);">Cross-reference data available for the five key passages in Commentary Engine.</div>',
                         unsafe_allow_html=True)
 
 
@@ -711,7 +711,7 @@ with tab2:
         st.session_state.scripture_data = fetch_scripture(passage_select, translation)
         st.session_state.scripture_ref  = passage_select
 
-    st.markdown(f'<div style="height:1px;background:{PURE_GOLD}22;margin:0.6rem 0 1.2rem;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:0.6rem 0 1.2rem;"></div>', unsafe_allow_html=True)
 
     # ── Context ──
     section_header("Historical & Literary Context")
@@ -721,14 +721,14 @@ with tab2:
     section_header("Scholarly Commentary")
     for sch in data["scholars"]:
         st.markdown(f'''
-            <div style="background:linear-gradient(135deg,{NAVY},{BIBLICAL_BLUE}22);
-                        border:1px solid {PURE_GOLD}33;border-left:4px solid {PURE_GOLD};
+            <div style="background:linear-gradient(135deg,{NAVY},rgba(0,56,168,0.133));
+                        border:1px solid rgba(212,175,55,0.2);border-left:4px solid {PURE_GOLD};
                         border-radius:4px;padding:1.1rem 1.3rem;margin-bottom:1rem;">
                 <div style="font-family:'Playfair Display',Georgia,serif;
                             font-size:1rem;font-weight:600;color:{PURE_GOLD};margin-bottom:0.2rem;">
                     {sch["author"]}
                 </div>
-                <div style="font-size:0.65rem;color:{LIGHT_GOLD}88;letter-spacing:0.06em;
+                <div style="font-size:0.65rem;color:rgba(245,225,122,0.533);letter-spacing:0.06em;
                             margin-bottom:0.7rem;font-style:italic;">{sch["work"]}</div>
                 <div style="font-size:0.86rem;color:{CREAM};line-height:1.88;">{sch["text"]}</div>
             </div>''', unsafe_allow_html=True)
@@ -740,9 +740,9 @@ with tab2:
         section_header("Lexical Notes // Greek & Hebrew")
         for strongs_num, term, transliteration, definition in data["greek"]:
             st.markdown(f'''
-                <div style="background:{NAVY};border:1px solid {PURE_GOLD}22;border-radius:3px;
+                <div style="background:{NAVY};border:1px solid rgba(212,175,55,0.133);border-radius:3px;
                             padding:0.8rem 1rem;margin-bottom:0.6rem;">
-                    <div style="font-size:0.62rem;color:{LIGHT_GOLD}88;letter-spacing:0.1em;">
+                    <div style="font-size:0.62rem;color:rgba(245,225,122,0.533);letter-spacing:0.1em;">
                         {strongs_num} · {transliteration}
                     </div>
                     <div style="font-size:1.4rem;color:{CREAM};margin:0.2rem 0;">{term}</div>
@@ -754,12 +754,12 @@ with tab2:
         section_header("Cross-References // Treasury of Scripture Knowledge")
         for ref_str, note in data["cross_refs"]:
             st.markdown(f'''
-                <div style="border-bottom:1px solid {PURE_GOLD}18;padding:0.6rem 0;">
+                <div style="border-bottom:1px solid rgba(212,175,55,0.094);padding:0.6rem 0;">
                     <div style="display:flex;gap:0.8rem;align-items:baseline;">
                         <span style="background:{TYRIAN_PURPLE};color:{PURE_GOLD};font-size:0.68rem;
                                      padding:2px 9px;border-radius:2px;white-space:nowrap;
-                                     border:1px solid {PURE_GOLD}44;">{ref_str}</span>
-                        <span style="font-size:0.8rem;color:{LIGHT_GOLD}cc;">{note}</span>
+                                     border:1px solid rgba(212,175,55,0.267);">{ref_str}</span>
+                        <span style="font-size:0.8rem;color:rgba(245,225,122,0.8);">{note}</span>
                     </div>
                 </div>''', unsafe_allow_html=True)
 
@@ -777,14 +777,14 @@ with tab2:
 
     # ── Church Fathers ──
     section_header("Church Fathers // Patristic Witness")
-    st.markdown(f'<div style="font-size:0.72rem;color:{LIGHT_GOLD}88;margin-bottom:0.8rem;">Formative voices in the interpretive tradition preceding the Reformation.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:0.72rem;color:rgba(245,225,122,0.533);margin-bottom:0.8rem;">Formative voices in the interpretive tradition preceding the Reformation.</div>', unsafe_allow_html=True)
     for father in CHURCH_FATHERS:
         with st.expander(f"{father['name']} ({father['dates']})"):
             st.markdown(f'''
                 <div style="font-size:0.84rem;color:{CREAM};line-height:1.8;margin-bottom:0.5rem;">
                     {father["contribution"]}
                 </div>
-                <div style="font-size:0.68rem;color:{PURE_GOLD}99;font-style:italic;">
+                <div style="font-size:0.68rem;color:rgba(212,175,55,0.6);font-style:italic;">
                     Key work: {father["key_work"]}
                 </div>''', unsafe_allow_html=True)
 
@@ -814,7 +814,7 @@ with tab3:
 
     with col_hist:
         section_header("Bibliographical Test", "Manuscript attestation compared with classical antiquity")
-        st.markdown(f'<div style="font-size:0.78rem;color:{LIGHT_GOLD}99;margin-bottom:0.8rem;">F.F. Bruce\'s bibliographical criterion: the NT possesses a documentary foundation orders of magnitude superior to any other ancient document. Scarlet = NT.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:0.78rem;color:rgba(245,225,122,0.6);margin-bottom:0.8rem;">F.F. Bruce\'s bibliographical criterion: the NT possesses a documentary foundation orders of magnitude superior to any other ancient document. Scarlet = NT.</div>', unsafe_allow_html=True)
         st.plotly_chart(build_manuscript_chart(), width="stretch")
 
         section_header("Textual Transmission")
@@ -886,7 +886,7 @@ with tab3:
                 st.markdown(f'<div style="font-size:0.84rem;color:{CREAM};line-height:1.88;">{content}</div>',
                             unsafe_allow_html=True)
 
-        st.markdown(f'<div style="height:1px;background:{PURE_GOLD}22;margin:1.2rem 0;"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="height:1px;background:rgba(212,175,55,0.133);margin:1.2rem 0;"></div>', unsafe_allow_html=True)
 
         section_header("Recommended Bibliography")
         biblio = [
@@ -903,10 +903,10 @@ with tab3:
         ]
         for author, work, note in biblio:
             st.markdown(f'''
-                <div style="border-bottom:1px solid {PURE_GOLD}18;padding:0.55rem 0;">
+                <div style="border-bottom:1px solid rgba(212,175,55,0.094);padding:0.55rem 0;">
                     <div style="font-size:0.78rem;color:{PURE_GOLD};">{author}</div>
                     <div style="font-size:0.73rem;color:{CREAM};font-style:italic;">{work}</div>
-                    <div style="font-size:0.68rem;color:{LIGHT_GOLD}88;margin-top:0.15rem;">{note}</div>
+                    <div style="font-size:0.68rem;color:rgba(245,225,122,0.533);margin-top:0.15rem;">{note}</div>
                 </div>''', unsafe_allow_html=True)
 
 
@@ -916,7 +916,7 @@ with tab3:
 with tab4:
     section_header("Research Prompts", "Curated questions for rigorous biblical and theological study")
     st.markdown(f'''
-        <div style="font-size:0.82rem;color:{LIGHT_GOLD}bb;line-height:1.8;margin-bottom:1.2rem;">
+        <div style="font-size:0.82rem;color:rgba(245,225,122,0.733);line-height:1.8;margin-bottom:1.2rem;">
         These prompts are designed for graduate-level engagement. Each question opens a line of inquiry
         that requires engagement with primary sources, original languages, and scholarly secondary literature.
         Use them with commentaries, lexicons, or in dialogue with a theological supervisor.
@@ -936,15 +936,15 @@ with tab4:
         "Apologetics": "Philosophical and evidential questions — the intellectual defense of Christian truth claims.",
         "Exegetical":  "Greek and Hebrew textual analysis — grammar, syntax, word studies, and interpretive disputes.",
     }
-    st.markdown(f'<div style="font-size:0.72rem;color:{LIGHT_GOLD}88;margin-bottom:1.2rem;">{category_descriptions[prompt_category]}</div>',
+    st.markdown(f'<div style="font-size:0.72rem;color:rgba(245,225,122,0.533);margin-bottom:1.2rem;">{category_descriptions[prompt_category]}</div>',
                 unsafe_allow_html=True)
 
     for i, prompt in enumerate(prompts, 1):
         st.markdown(f'''
-            <div style="background:{NAVY};border:1px solid {PURE_GOLD}33;border-left:3px solid {PURE_GOLD};
+            <div style="background:{NAVY};border:1px solid rgba(212,175,55,0.2);border-left:3px solid {PURE_GOLD};
                         border-radius:4px;padding:1rem 1.2rem;margin-bottom:0.75rem;
                         box-shadow:0 1px 8px rgba(0,0,0,0.3);">
-                <div style="font-size:0.6rem;color:{LIGHT_GOLD}66;letter-spacing:0.12em;
+                <div style="font-size:0.6rem;color:rgba(245,225,122,0.4);letter-spacing:0.12em;
                             margin-bottom:0.4rem;">{prompt_category.upper()} INQUIRY {i:02d}</div>
                 <div style="font-size:0.88rem;color:{CREAM};line-height:1.8;">{prompt}</div>
             </div>''', unsafe_allow_html=True)
