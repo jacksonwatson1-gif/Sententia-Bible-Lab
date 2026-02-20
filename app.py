@@ -15,6 +15,8 @@ import re
 import json
 import math
 import hashlib
+import datetime
+from supabase import create_client, Client
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG  (must be first Streamlit call)
@@ -584,6 +586,21 @@ def get_crossref_email():
     """Crossref Polite Pool — email identifies requester for higher rate limits."""
     try: return st.secrets["CROSSREF_EMAIL"]
     except: return ""
+
+def get_supabase_client():
+    """
+    Return an authenticated Supabase client, or None if credentials are absent.
+    Uses st.cache_resource so the connection is shared across reruns — one
+    client instance per Streamlit server process.
+    """
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        if url and key:
+            return create_client(url, key)
+    except Exception:
+        pass
+    return None
 
 
 # ─────────────────────────────────────────────
@@ -1453,6 +1470,182 @@ def fetch_apibible(reference: str, bible_id: str, api_key: str) -> dict:
 
 
 # ─────────────────────────────────────────────
+# SUPABASE — PERSISTENT LIBRARY
+# Schema (run once in Supabase SQL Editor):
+#
+#   CREATE TABLE research_archive (
+#     id          BIGSERIAL PRIMARY KEY,
+#     created_at  TIMESTAMPTZ DEFAULT NOW(),
+#     passage_ref TEXT,
+#     inquiry     TEXT,
+#     response    TEXT,
+#     translation TEXT,
+#     notes       TEXT DEFAULT ''
+#   );
+#
+#   CREATE TABLE article_shelf (
+#     id          BIGSERIAL PRIMARY KEY,
+#     saved_at    TIMESTAMPTZ DEFAULT NOW(),
+#     passage_ref TEXT,
+#     title       TEXT,
+#     authors     TEXT,
+#     journal     TEXT,
+#     year        TEXT,
+#     doi         TEXT,
+#     url         TEXT,
+#     notes       TEXT DEFAULT ''
+#   );
+#
+#   CREATE TABLE lexicon_notebook (
+#     id          BIGSERIAL PRIMARY KEY,
+#     saved_at    TIMESTAMPTZ DEFAULT NOW(),
+#     strongs_num TEXT UNIQUE,
+#     lemma       TEXT,
+#     language    TEXT,
+#     definition  TEXT,
+#     notes       TEXT DEFAULT ''
+#   );
+# ─────────────────────────────────────────────
+
+def save_research(db, passage_ref: str, inquiry: str, response: str,
+                  translation: str, notes: str = "") -> bool:
+    """
+    Persist an AI Scholar response to the research_archive table.
+
+    Args:
+        db:           Supabase client from get_supabase_client().
+        passage_ref:  e.g. 'Romans 3:25'.
+        inquiry:      The user's original question.
+        response:     Full AI markdown response.
+        translation:  KJV / ESV / WEB etc.
+        notes:        Optional personal annotation.
+
+    Returns:
+        True on success, False on failure.
+    """
+    if not db:
+        return False
+    try:
+        db.table("research_archive").insert({
+            "passage_ref": passage_ref or "General",
+            "inquiry":     inquiry,
+            "response":    response,
+            "translation": translation,
+            "notes":       notes,
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"Save failed: {e}")
+        return False
+
+
+def save_article(db, passage_ref: str, article: dict, notes: str = "") -> bool:
+    """
+    Bookmark a Crossref article to the article_shelf table.
+
+    Args:
+        db:           Supabase client.
+        passage_ref:  The passage context this article was found under.
+        article:      Dict from get_scholarly_articles() — title, authors,
+                      journal, year, doi, url, score.
+        notes:        Optional personal annotation.
+
+    Returns:
+        True on success, False on failure.
+    """
+    if not db:
+        return False
+    try:
+        db.table("article_shelf").insert({
+            "passage_ref": passage_ref or "General",
+            "title":       article.get("title", ""),
+            "authors":     article.get("authors", ""),
+            "journal":     article.get("journal", ""),
+            "year":        article.get("year", ""),
+            "doi":         article.get("doi", ""),
+            "url":         article.get("url", ""),
+            "notes":       notes,
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"Save failed: {e}")
+        return False
+
+
+def save_lexicon_entry(db, entry: dict, notes: str = "") -> bool:
+    """
+    Save a Biblia lexicon entry to the lexicon_notebook table.
+    Uses UPSERT on strongs_num so re-saving updates notes rather than duplicating.
+
+    Args:
+        db:     Supabase client.
+        entry:  Dict from get_lexicon_data() — number, lemma, language, definition.
+        notes:  Optional personal annotation.
+
+    Returns:
+        True on success, False on failure.
+    """
+    if not db:
+        return False
+    try:
+        db.table("lexicon_notebook").upsert({
+            "strongs_num": entry.get("number", ""),
+            "lemma":       entry.get("lemma", ""),
+            "language":    entry.get("language", ""),
+            "definition":  entry.get("definition", ""),
+            "notes":       notes,
+        }, on_conflict="strongs_num").execute()
+        return True
+    except Exception as e:
+        st.error(f"Save failed: {e}")
+        return False
+
+
+def get_library(db) -> dict:
+    """
+    Fetch all three library tables in one call.
+
+    Returns:
+        dict with keys:
+            'archive'  — list of research_archive rows (newest first)
+            'shelf'    — list of article_shelf rows (newest first)
+            'notebook' — list of lexicon_notebook rows (newest first)
+        Each key maps to [] on failure or empty table.
+    """
+    result = {"archive": [], "shelf": [], "notebook": []}
+    if not db:
+        return result
+    try:
+        result["archive"] = (db.table("research_archive")
+                               .select("*")
+                               .order("created_at", desc=True)
+                               .execute().data or [])
+        result["shelf"]   = (db.table("article_shelf")
+                               .select("*")
+                               .order("saved_at", desc=True)
+                               .execute().data or [])
+        result["notebook"]= (db.table("lexicon_notebook")
+                               .select("*")
+                               .order("saved_at", desc=True)
+                               .execute().data or [])
+    except Exception as e:
+        st.error(f"Library fetch failed: {e}")
+    return result
+
+
+def delete_library_row(db, table: str, row_id: int) -> bool:
+    """Delete a single row by id from any library table."""
+    if not db:
+        return False
+    try:
+        db.table(table).delete().eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Delete failed: {e}")
+        return False
+
+
+# ─────────────────────────────────────────────
 # BIBLIA LEXICON  (Strong's — live definitions)
 # ─────────────────────────────────────────────
 
@@ -1806,6 +1999,7 @@ esv_key         = get_esv_key()
 api_key         = get_api_bible_key()
 biblia_key      = get_biblia_key()
 crossref_email  = get_crossref_email()
+supabase_db     = get_supabase_client()
 
 
 # ─────────────────────────────────────────────
@@ -1868,6 +2062,7 @@ with st.sidebar:
         ("API.Bible",   bool(api_key),        "🌐"),
         ("Biblia Lex",  bool(biblia_key),     "📚"),
         ("Crossref",    bool(crossref_email), "🔬"),
+        ("Library DB",  bool(supabase_db),    "🗄️"),
     ]:
         dot_color = "#4caf50" if active else "#555"
         txt_color = GOLD if active else "rgba(245,225,122,.28)"
@@ -2168,13 +2363,28 @@ else:
         with right_col:
             sec_head("Scholarly Insight", "AI Scholar Response — Parchment View")
             parchment(st.session_state.inq_response)
+            # Save to Library
+            if supabase_db:
+                sv1, sv2 = st.columns([2, 5])
+                with sv1:
+                    if st.button("💾  Save to Library", key="save_inq_btn",
+                                 use_container_width=True):
+                        ok = save_research(
+                            supabase_db,
+                            st.session_state.get("scripture_ref", ""),
+                            st.session_state.get("inq_text", ""),
+                            st.session_state.get("inq_response", ""),
+                            {"kjv":"KJV","web":"WEB","bbe":"BBE"}.get(translation,"KJV"),
+                        )
+                        if ok:
+                            st.success("Saved to Research Archive.", icon="✅")
 
         st.markdown("<hr/>", unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════
     # SIX SCHOLARLY TABS
     # ══════════════════════════════════════════════════
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📖  Scripture Lab",
         "🏛  Commentary Engine",
         "⚔  Apologetics",
@@ -2182,6 +2392,7 @@ else:
         "⚖  Theological Debates",
         "🤖  AI Scholar",
         "🔬  Research Panel",
+        "📚  Library",
     ])
 
 
@@ -2866,6 +3077,16 @@ else:
                                     f'opacity:.8">{entry["kjv_usage"]}</div>',
                                     unsafe_allow_html=True)
 
+                        if supabase_db:
+                            if st.button("💾  Save to Notebook",
+                                         key=f'save_lex_{lookup_num}',
+                                         use_container_width=True):
+                                ok = save_lexicon_entry(supabase_db, entry)
+                                if ok:
+                                    st.success(f'{lookup_num} saved to Lexicon Notebook.',
+                                               icon="✅")
+                                    st.session_state.pop("library_data", None)
+
         # ── RIGHT: Crossref Scholarly Articles ────────────────────────────────
         with art_col:
             sec_head("Scholarly Literature", "Crossref Polite Pool — Peer-Reviewed Journals")
@@ -2966,3 +3187,385 @@ else:
                               f'</div>'
 
                             f'</div>', unsafe_allow_html=True)
+
+                        if supabase_db:
+                            if st.button("🔖  Save Article",
+                                         key=f'save_art_{i}_{art.get("doi","x")}',
+                                         use_container_width=False):
+                                ok = save_article(
+                                    supabase_db,
+                                    st.session_state.get("scripture_ref", ""),
+                                    art,
+                                )
+                                if ok:
+                                    st.success("Article saved to shelf.", icon="✅")
+                                    st.session_state.pop("library_data", None)
+
+
+    # ══════════════════════════════════════════════
+    # TAB 8 — LIBRARY
+    # Persistent Research Archive | Article Shelf | Lexicon Notebook
+    # ══════════════════════════════════════════════
+    with tab8:
+
+        sec_head("Personal Library", "Research Archive · Article Shelf · Lexicon Notebook")
+
+        if not supabase_db:
+            st.markdown(
+                f'<div style="background:rgba(178,34,34,.08);border:1px solid rgba(178,34,34,.3);'
+                f'border-radius:6px;padding:1rem 1.2rem;font-size:.8rem;color:{SCARLET};line-height:1.8">'
+                f'⚠ Supabase is not configured. Add <code>SUPABASE_URL</code> and '
+                f'<code>SUPABASE_KEY</code> to Streamlit secrets to enable the persistent library.</div>',
+                unsafe_allow_html=True)
+        else:
+            # ── Schema reminder (collapsed) ──────────────────────────────────
+            with st.expander("⚙️  First-time setup — run this SQL in your Supabase SQL Editor",
+                             expanded=False):
+                st.code("""
+CREATE TABLE IF NOT EXISTS research_archive (
+    id          BIGSERIAL PRIMARY KEY,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    passage_ref TEXT,
+    inquiry     TEXT,
+    response    TEXT,
+    translation TEXT,
+    notes       TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS article_shelf (
+    id          BIGSERIAL PRIMARY KEY,
+    saved_at    TIMESTAMPTZ DEFAULT NOW(),
+    passage_ref TEXT,
+    title       TEXT,
+    authors     TEXT,
+    journal     TEXT,
+    year        TEXT,
+    doi         TEXT,
+    url         TEXT,
+    notes       TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS lexicon_notebook (
+    id          BIGSERIAL PRIMARY KEY,
+    saved_at    TIMESTAMPTZ DEFAULT NOW(),
+    strongs_num TEXT UNIQUE,
+    lemma       TEXT,
+    language    TEXT,
+    definition  TEXT,
+    notes       TEXT DEFAULT ''
+);
+""", language="sql")
+
+            ornament()
+
+            # ── Fetch all library data ────────────────────────────────────────
+            if st.button("🔄  Refresh Library", key="lib_refresh",
+                         use_container_width=False):
+                st.session_state.pop("library_data", None)
+
+            if "library_data" not in st.session_state:
+                with st.spinner("Loading library…"):
+                    st.session_state.library_data = get_library(supabase_db)
+
+            lib = st.session_state.get("library_data",
+                                       {"archive": [], "shelf": [], "notebook": []})
+
+            # ── Three-column summary strip ────────────────────────────────────
+            mc1, mc2, mc3 = st.columns(3)
+            for col, label, count, icon in [
+                (mc1, "Research Entries", len(lib["archive"]),  "📝"),
+                (mc2, "Saved Articles",   len(lib["shelf"]),    "📄"),
+                (mc3, "Lexicon Entries",  len(lib["notebook"]), "🔤"),
+            ]:
+                col.markdown(
+                    f'<div style="background:linear-gradient(135deg,rgba(4,9,26,.9),rgba(7,16,31,.95));'
+                    f'border:1px solid rgba(212,175,55,.18);border-top:2px solid {GOLD};'
+                    f'border-radius:0 0 6px 6px;padding:.9rem 1rem;text-align:center">'
+                    f'<div style="font-family:Playfair Display,Georgia,serif;'
+                    f'font-size:1.8rem;color:{GOLD}">{icon} {count}</div>'
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.55;'
+                    f'letter-spacing:.14em;text-transform:uppercase;margin-top:.2rem">{label}</div>'
+                    f'</div>', unsafe_allow_html=True)
+
+            ornament()
+
+            # ══════════════════════════════════════════
+            # SECTION 1 — RESEARCH ARCHIVE
+            # ══════════════════════════════════════════
+            sec_head("Research Archive", "Saved AI Scholar Responses")
+
+            if not lib["archive"]:
+                st.markdown(
+                    f'<div style="font-size:.78rem;color:{LT_GOLD};opacity:.42;'
+                    f'font-style:italic;padding:.5rem 0">No entries yet. Use the '
+                    f'💾 Save to Library button on any AI Scholar response.</div>',
+                    unsafe_allow_html=True)
+            else:
+                # Search filter
+                arc_search = st.text_input(
+                    "Search archive", placeholder="Filter by passage, keyword…",
+                    label_visibility="collapsed", key="arc_search")
+
+                archive_rows = lib["archive"]
+                if arc_search.strip():
+                    q = arc_search.strip().lower()
+                    archive_rows = [r for r in archive_rows
+                                    if q in (r.get("passage_ref") or "").lower()
+                                    or q in (r.get("inquiry") or "").lower()
+                                    or q in (r.get("response") or "").lower()]
+
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.4;'
+                    f'letter-spacing:.1em;margin-bottom:.5rem">'
+                    f'{len(archive_rows)} OF {len(lib["archive"])} ENTRIES</div>',
+                    unsafe_allow_html=True)
+
+                for row in archive_rows:
+                    ts = row.get("created_at", "")[:10]
+                    ref = row.get("passage_ref") or "General"
+                    inq = row.get("inquiry") or ""
+                    trans = row.get("translation") or ""
+
+                    with st.expander(
+                            f'📝  {ref}  ·  {ts}  ·  {inq[:60]}{"…" if len(inq)>60 else ""}'):
+
+                        # Metadata strip
+                        st.markdown(
+                            f'<div style="display:flex;gap:1rem;margin-bottom:.6rem;'
+                            f'flex-wrap:wrap">'
+                            f'<span style="font-size:.6rem;color:{LT_GOLD};opacity:.6;'
+                            f'font-family:IBM Plex Mono,monospace">{ref}</span>'
+                            f'<span style="font-size:.6rem;color:{LT_GOLD};opacity:.4;'
+                            f'font-family:IBM Plex Mono,monospace">{trans}</span>'
+                            f'<span style="font-size:.6rem;color:{LT_GOLD};opacity:.4;'
+                            f'font-family:IBM Plex Mono,monospace">{ts}</span>'
+                            f'</div>', unsafe_allow_html=True)
+
+                        # Original inquiry
+                        if inq:
+                            st.markdown(
+                                f'<div style="font-size:.72rem;color:{CREAM};opacity:.7;'
+                                f'font-style:italic;margin-bottom:.6rem;'
+                                f'border-left:2px solid rgba(212,175,55,.25);'
+                                f'padding-left:.7rem">"{inq}"</div>',
+                                unsafe_allow_html=True)
+
+                        # Full response in parchment
+                        if row.get("response"):
+                            parchment(row["response"])
+
+                        # Personal notes
+                        note_key = f'arc_note_{row["id"]}'
+                        existing_note = row.get("notes") or ""
+                        new_note = st.text_area(
+                            "Personal notes", value=existing_note,
+                            key=note_key, height=70,
+                            label_visibility="collapsed",
+                            placeholder="Add personal annotation…")
+
+                        nc1, nc2 = st.columns([2, 8])
+                        with nc1:
+                            if st.button("💾 Save Note", key=f'save_arc_note_{row["id"]}',
+                                         use_container_width=True):
+                                try:
+                                    supabase_db.table("research_archive").update(
+                                        {"notes": new_note}
+                                    ).eq("id", row["id"]).execute()
+                                    st.success("Note saved.", icon="✅")
+                                    st.session_state.pop("library_data", None)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Failed: {e}")
+                        with nc2:
+                            if st.button("🗑 Delete Entry", key=f'del_arc_{row["id"]}',
+                                         use_container_width=False):
+                                if delete_library_row(supabase_db, "research_archive",
+                                                      row["id"]):
+                                    st.success("Entry deleted.")
+                                    st.session_state.pop("library_data", None)
+                                    st.rerun()
+
+            ornament()
+
+            # ══════════════════════════════════════════
+            # SECTION 2 — ARTICLE SHELF
+            # ══════════════════════════════════════════
+            sec_head("Article Shelf", "Saved Crossref Journal Articles")
+
+            if not lib["shelf"]:
+                st.markdown(
+                    f'<div style="font-size:.78rem;color:{LT_GOLD};opacity:.42;'
+                    f'font-style:italic;padding:.5rem 0">No articles saved yet. '
+                    f'Use the 🔖 Save Article button in the Research Panel.</div>',
+                    unsafe_allow_html=True)
+            else:
+                shelf_search = st.text_input(
+                    "Search shelf", placeholder="Filter by title, journal, author…",
+                    label_visibility="collapsed", key="shelf_search")
+
+                shelf_rows = lib["shelf"]
+                if shelf_search.strip():
+                    q = shelf_search.strip().lower()
+                    shelf_rows = [r for r in shelf_rows
+                                  if q in (r.get("title") or "").lower()
+                                  or q in (r.get("journal") or "").lower()
+                                  or q in (r.get("authors") or "").lower()]
+
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.4;'
+                    f'letter-spacing:.1em;margin-bottom:.5rem">'
+                    f'{len(shelf_rows)} OF {len(lib["shelf"])} ARTICLES</div>',
+                    unsafe_allow_html=True)
+
+                for row in shelf_rows:
+                    ts   = row.get("saved_at", "")[:10]
+                    doi  = row.get("doi") or ""
+                    url  = row.get("url") or (f"https://doi.org/{doi}" if doi else "")
+                    title = row.get("title") or "Untitled"
+
+                    st.markdown(
+                        f'<div style="background:linear-gradient(135deg,rgba(4,9,26,.75),'
+                        f'rgba(7,16,31,.9));border:1px solid rgba(212,175,55,.14);'
+                        f'border-left:3px solid rgba(212,175,55,.4);'
+                        f'border-radius:0 5px 5px 0;padding:.85rem 1rem;margin-bottom:.45rem">'
+
+                        f'<div style="font-family:Playfair Display,Georgia,serif;'
+                        f'font-size:.9rem;color:{GOLD};line-height:1.35;margin-bottom:.25rem">'
+                        f'{title}</div>'
+
+                        f'<div style="font-size:.64rem;color:{LT_GOLD};opacity:.65;'
+                        f'font-style:italic;margin-bottom:.18rem">'
+                        f'{row.get("authors","")}</div>'
+
+                        f'<div style="display:flex;align-items:center;gap:.5rem;'
+                        f'margin-bottom:.4rem">'
+                        f'<span style="font-size:.65rem;color:{CREAM};opacity:.75">'
+                        f'{row.get("journal","")}</span>'
+                        f'<span style="font-size:.58rem;color:{NAVY};background:{LT_GOLD};'
+                        f'padding:1px 6px;border-radius:2px;font-weight:600">'
+                        f'{row.get("year","")}</span>'
+                        f'<span style="font-size:.58rem;color:{LT_GOLD};opacity:.4;'
+                        f'margin-left:auto">{row.get("passage_ref","")} · {ts}</span>'
+                        f'</div>'
+
+                        + (f'<a href="{url}" target="_blank" style="font-size:.63rem;'
+                           f'color:rgba(212,175,55,.7);text-decoration:none;'
+                           f'font-family:IBM Plex Mono,monospace;letter-spacing:.04em;'
+                           f'border-bottom:1px solid rgba(212,175,55,.25)">'
+                           f'DOI: {doi} ↗</a>' if url else "")
+
+                        + f'</div>', unsafe_allow_html=True)
+
+                    # Notes + delete row
+                    snote_key = f'shelf_note_{row["id"]}'
+                    existing  = row.get("notes") or ""
+                    new_snote = st.text_area(
+                        "Notes", value=existing, key=snote_key,
+                        height=60, label_visibility="collapsed",
+                        placeholder="Add annotation…")
+
+                    sc1, sc2 = st.columns([2, 8])
+                    with sc1:
+                        if st.button("💾 Save Note", key=f'save_shelf_{row["id"]}',
+                                     use_container_width=True):
+                            try:
+                                supabase_db.table("article_shelf").update(
+                                    {"notes": new_snote}
+                                ).eq("id", row["id"]).execute()
+                                st.success("Note saved.", icon="✅")
+                                st.session_state.pop("library_data", None)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+                    with sc2:
+                        if st.button("🗑 Delete", key=f'del_shelf_{row["id"]}',
+                                     use_container_width=False):
+                            if delete_library_row(supabase_db, "article_shelf",
+                                                  row["id"]):
+                                st.success("Article removed.")
+                                st.session_state.pop("library_data", None)
+                                st.rerun()
+
+            ornament()
+
+            # ══════════════════════════════════════════
+            # SECTION 3 — LEXICON NOTEBOOK
+            # ══════════════════════════════════════════
+            sec_head("Lexicon Notebook", "Personal Strong's Annotations")
+
+            if not lib["notebook"]:
+                st.markdown(
+                    f'<div style="font-size:.78rem;color:{LT_GOLD};opacity:.42;'
+                    f'font-style:italic;padding:.5rem 0">No entries yet. '
+                    f'Use the 💾 Save to Notebook button in the Research Panel.</div>',
+                    unsafe_allow_html=True)
+            else:
+                nb_search = st.text_input(
+                    "Search notebook",
+                    placeholder="Filter by Strong's number, lemma…",
+                    label_visibility="collapsed", key="nb_search")
+
+                nb_rows = lib["notebook"]
+                if nb_search.strip():
+                    q = nb_search.strip().lower()
+                    nb_rows = [r for r in nb_rows
+                               if q in (r.get("strongs_num") or "").lower()
+                               or q in (r.get("lemma") or "").lower()
+                               or q in (r.get("definition") or "").lower()]
+
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.4;'
+                    f'letter-spacing:.1em;margin-bottom:.5rem">'
+                    f'{len(nb_rows)} OF {len(lib["notebook"])} ENTRIES</div>',
+                    unsafe_allow_html=True)
+
+                nb_cols = st.columns(2)
+                for i, row in enumerate(nb_rows):
+                    lang_col = GOLD if row.get("language") == "Greek" else SCARLET
+                    with nb_cols[i % 2]:
+                        with st.expander(
+                                f'{row.get("strongs_num","")}  '
+                                f'{row.get("lemma","")}  ·  '
+                                f'{row.get("language","")}'):
+
+                            st.markdown(
+                                f'<div style="font-family:Crimson Text,Georgia,serif;'
+                                f'font-size:.92rem;color:{INK};background:{PARCHMENT};'
+                                f'padding:.8rem 1rem;border-radius:4px;'
+                                f'border-left:3px solid {lang_col};'
+                                f'line-height:1.85;margin-bottom:.5rem">'
+                                f'{row.get("definition","")}</div>',
+                                unsafe_allow_html=True)
+
+                            nb_note_key = f'nb_note_{row["id"]}'
+                            existing_nb = row.get("notes") or ""
+                            new_nb_note = st.text_area(
+                                "Notes", value=existing_nb,
+                                key=nb_note_key, height=70,
+                                label_visibility="collapsed",
+                                placeholder="Personal exegetical note…")
+
+                            nb1, nb2 = st.columns([3, 7])
+                            with nb1:
+                                if st.button("💾 Save",
+                                             key=f'save_nb_{row["id"]}',
+                                             use_container_width=True):
+                                    try:
+                                        supabase_db.table("lexicon_notebook").update(
+                                            {"notes": new_nb_note}
+                                        ).eq("id", row["id"]).execute()
+                                        st.success("Saved.", icon="✅")
+                                        st.session_state.pop("library_data", None)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Failed: {e}")
+                            with nb2:
+                                if st.button("🗑 Delete",
+                                             key=f'del_nb_{row["id"]}',
+                                             use_container_width=False):
+                                    if delete_library_row(
+                                            supabase_db, "lexicon_notebook",
+                                            row["id"]):
+                                        st.success("Entry removed.")
+                                        st.session_state.pop("library_data", None)
+                                        st.rerun()
