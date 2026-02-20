@@ -114,7 +114,18 @@ st.markdown(f"""
     color:{GOLD}!important;
     font-weight:600!important;
 }}
-[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"]{{display:none!important}}
+/* Boost specificity so nav label text is visible against global div/p/span cream rule */
+[data-testid="stSidebar"] .stRadio label p,
+[data-testid="stSidebar"] .stRadio label span,
+[data-testid="stSidebar"] .stRadio label div{{
+    color:rgba(245,225,122,.55)!important;
+    font-family:'IBM Plex Mono',monospace!important;
+    font-size:.72rem!important;
+    letter-spacing:.08em!important;
+}}
+[data-testid="stSidebar"] .stRadio label:hover p,
+[data-testid="stSidebar"] .stRadio label:hover span,
+[data-testid="stSidebar"] .stRadio label:hover div{{color:{GOLD}!important}}
 
 /* Sidebar quick-load buttons */
 [data-testid="stSidebar"] .stButton>button{{
@@ -140,9 +151,12 @@ st.markdown(f"""
 /* ════════════════════════════════════════════
    TYPOGRAPHY
    ════════════════════════════════════════════ */
-body,.stMarkdown,p,div{{
+body,.stMarkdown,p{{
     font-family:'IBM Plex Mono','Courier New',monospace;
     color:{CREAM};
+}}
+div:not(.scholarly-box):not(.scholarly-box *){{
+    font-family:inherit;
 }}
 
 /* ════════════════════════════════════════════
@@ -345,10 +359,15 @@ hr{{
     box-shadow:
         0 2px 8px rgba(74,55,40,.12),
         inset 0 0 0 1px rgba(74,55,40,.07);
-    font-family:'Crimson Text',Georgia,serif;
-    color:{INK};
+    font-family:'Crimson Text',Georgia,serif!important;
+    color:{INK}!important;
     line-height:1.95;
     font-size:1.06rem;
+}}
+/* Force all children to inherit dark ink — prevents CREAM override from parent divs */
+.scholarly-box,.scholarly-box p,.scholarly-box div,
+.scholarly-box span,.scholarly-box li,.scholarly-box td{{
+    color:{INK}!important;
 }}
 .scholarly-box h2{{
     font-family:'Playfair Display',Georgia,serif;
@@ -380,6 +399,13 @@ hr{{
     color:#5a3020;
 }}
 .scholarly-box p{{margin:.6rem 0;text-align:justify}}
+/* Critical: defeat the global body/div/p/span cream rule inside parchment */
+.scholarly-box,.scholarly-box *{{color:{INK}!important;font-family:'Crimson Text',Georgia,serif!important}}
+.scholarly-box h2,.scholarly-box h2 *{{color:{BROWN}!important;font-family:'Playfair Display',Georgia,serif!important}}
+.scholarly-box h3,.scholarly-box h3 *{{color:#5a4030!important;font-family:'Crimson Text',Georgia,serif!important}}
+.scholarly-box strong,.scholarly-box strong *{{color:{BROWN}!important}}
+.scholarly-box em,.scholarly-box em *{{color:#5a4030!important}}
+.scholarly-box code,.scholarly-box code *{{color:#5a3020!important;font-family:'IBM Plex Mono',monospace!important}}
 
 /* ════════════════════════════════════════════
    METADATA PANEL
@@ -2022,566 +2048,566 @@ else:
 
 
 
-# ══════════════════════════════════════════════
-# TAB 1 — SCRIPTURE LAB
-# ══════════════════════════════════════════════
-with tab1:
-    # Reference input
-    default_ref = st.session_state.pop("quick_ref", None) or st.session_state.get("scripture_ref", "John 3:16")
-    rc, bc = st.columns([5, 1])
-    with rc:
-        ref_input = st.text_input("Reference", value=default_ref,
-                                   placeholder="e.g. Romans 8:28-39",
-                                   label_visibility="collapsed")
-    with bc:
-        fetch_btn = st.button("FETCH", use_container_width=True)
+    # ══════════════════════════════════════════════
+    # TAB 1 — SCRIPTURE LAB
+    # ══════════════════════════════════════════════
+    with tab1:
+        # Reference input
+        default_ref = st.session_state.pop("quick_ref", None) or st.session_state.get("scripture_ref", "John 3:16")
+        rc, bc = st.columns([5, 1])
+        with rc:
+            ref_input = st.text_input("Reference", value=default_ref,
+                                       placeholder="e.g. Romans 8:28-39",
+                                       label_visibility="collapsed")
+        with bc:
+            fetch_btn = st.button("FETCH", use_container_width=True)
 
-    if fetch_btn or ref_input != st.session_state.get("scripture_ref"):
-        if ref_input:
-            with st.spinner("Fetching…"):
-                st.session_state.scripture_data = fetch_scripture(ref_input, translation)
-                st.session_state.scripture_ref  = ref_input
-                st.session_state.pop("ai_analysis", None)
+        if fetch_btn or ref_input != st.session_state.get("scripture_ref"):
+            if ref_input:
+                with st.spinner("Fetching…"):
+                    st.session_state.scripture_data = fetch_scripture(ref_input, translation)
+                    st.session_state.scripture_ref  = ref_input
+                    st.session_state.pop("ai_analysis", None)
 
-    sdata = st.session_state.get("scripture_data", {})
-    sref  = st.session_state.get("scripture_ref", ref_input)
+        sdata = st.session_state.get("scripture_data", {})
+        sref  = st.session_state.get("scripture_ref", ref_input)
 
-    if sdata.get("fallback"):
-        st.markdown(f'<div style="font-size:.67rem;color:{SCARLET};margin-bottom:.35rem">'
-                    f'⚠ API unavailable — hardcoded KJV fallback active.</div>',
-                    unsafe_allow_html=True)
-
-    # Two-column layout: text left, interlinear/lexical right
-    text_col, right_col = st.columns([1, 1], gap="large")
-
-    with text_col:
-        sec_head("Scripture Text", sref)
-        if sdata.get("error") and not sdata.get("verses"):
-            card(f'<span style="color:{SCARLET}">⚠ {sdata["error"]}</span>', SCARLET)
-        elif sdata.get("verses"):
-            tname = sdata.get("translation_name", translation.upper())
-            st.markdown(
-                f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.62;'
-                f'letter-spacing:.12em;margin-bottom:.35rem">{sref.upper()} · {tname.upper()}</div>',
-                unsafe_allow_html=True)
-            vhtml = "".join(
-                f'<span style="color:{SCARLET};font-weight:600;font-size:.67rem;margin-right:3px">[{v.get("verse","")}]</span>'
-                f'<span style="color:{CREAM}">{v.get("text","").strip()}</span> '
-                for v in sdata["verses"])
-            st.markdown(
-                f'<div style="font-family:IBM Plex Mono,monospace;font-size:.86rem;line-height:2.05;'
-                f'color:{CREAM};background:{NAVY};border-left:3px solid {GOLD};'
-                f'padding:.95rem 1.15rem;border-radius:3px;border:1px solid rgba(212,175,55,.16)">'
-                f'{vhtml}</div>', unsafe_allow_html=True)
-
-        # AI Passage Analyst
-        if sdata.get("verses"):
-            st.markdown("<hr/>", unsafe_allow_html=True)
-            sec_head("AI Passage Analysis")
-            ab, nb = st.columns([2, 5])
-            with ab:
-                analyse = st.button("⚡ ANALYSE PASSAGE", key="analyse_btn",
-                                    use_container_width=True, disabled=not anthropic_key)
-            with nb:
-                if not anthropic_key:
-                    st.markdown(f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.42;'
-                                f'padding-top:.45rem">Add ANTHROPIC_API_KEY to enable.</div>',
-                                unsafe_allow_html=True)
-            if analyse:
-                vtxt  = " ".join(v.get("text", "").strip() for v in sdata["verses"])
-                tlbl  = {"kjv": "KJV", "web": "WEB", "bbe": "BBE"}.get(translation, "KJV")
-                result = ai_analyse_passage(sref, vtxt, tlbl, anthropic_key)
-                st.session_state.ai_analysis     = result
-                st.session_state.ai_analysis_ref = sref
-
-            if (st.session_state.get("ai_analysis")
-                    and st.session_state.get("ai_analysis_ref") == sref):
-                parchment(st.session_state.ai_analysis)
-
-        # Parallel translations
-        st.markdown("<hr/>", unsafe_allow_html=True)
-        sec_head("Parallel Translations")
-        if esv_key:
-            with st.expander("English Standard Version (ESV)", expanded=True):
-                edata = fetch_esv(sref, esv_key)
-                if edata.get("verses"):
-                    ehtml = " ".join(
-                        f'<span style="color:{SCARLET};font-weight:600;font-size:.67rem;margin-right:3px">[{v.get("verse","")}]</span>'
-                        + v.get("text", "").strip()
-                        for v in edata["verses"])
-                    st.markdown(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.95">{ehtml}</div>',
-                                unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div style="font-size:.75rem;color:{SCARLET}">{edata.get("error","")}</div>',
-                                unsafe_allow_html=True)
-        for alt in ["kjv", "web", "bbe"]:
-            if alt != translation:
-                lbl = {"kjv": "King James Version", "web": "World English Bible",
-                       "bbe": "Basic English Bible"}[alt]
-                with st.expander(lbl):
-                    ad = fetch_scripture(sref, alt)
-                    if ad.get("verses"):
-                        st.markdown(
-                            f'<div style="font-size:.84rem;color:{CREAM};line-height:1.9">'
-                            + " ".join(v.get("text","") for v in ad["verses"]) + '</div>',
-                            unsafe_allow_html=True)
-        if api_key and premium_trans:
-            with st.expander(f"{premium_trans} (API.Bible)"):
-                pd_data = fetch_apibible(sref, APIBIBLE_TRANSLATIONS[premium_trans], api_key)
-                if pd_data.get("verses"):
-                    st.markdown(
-                        f'<div style="font-size:.84rem;color:{CREAM};line-height:1.9">'
-                        + " ".join(v.get("text","") for v in pd_data["verses"]) + '</div>',
+        if sdata.get("fallback"):
+            st.markdown(f'<div style="font-size:.67rem;color:{SCARLET};margin-bottom:.35rem">'
+                        f'⚠ API unavailable — hardcoded KJV fallback active.</div>',
                         unsafe_allow_html=True)
 
-    with right_col:
-        sec_head("Interlinear Analysis")
-        ikey = next((k for k in INTERLINEAR
-                     if k.lower().replace(" ", "") in sref.lower().replace(" ", "")), None)
-        if ikey:
-            st.markdown(
-                f'<div style="font-size:.65rem;color:{LT_GOLD};opacity:.62;margin-bottom:.45rem">'
-                f'Word-by-word · Strong\'s numbers</div>', unsafe_allow_html=True)
-            for eng, gk, snum, gloss in INTERLINEAR[ikey]:
+        # Two-column layout: text left, interlinear/lexical right
+        text_col, right_col = st.columns([1, 1], gap="large")
+
+        with text_col:
+            sec_head("Scripture Text", sref)
+            if sdata.get("error") and not sdata.get("verses"):
+                card(f'<span style="color:{SCARLET}">⚠ {sdata["error"]}</span>', SCARLET)
+            elif sdata.get("verses"):
+                tname = sdata.get("translation_name", translation.upper())
                 st.markdown(
-                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.25rem;'
-                    f'border-bottom:1px solid rgba(212,175,55,.09);padding:.3rem 0">'
-                    f'<div><div style="font-size:.68rem;color:{CREAM};font-weight:500">{eng}</div>'
-                    f'<div style="font-size:1.08rem;color:{GOLD};margin-top:.04rem">{gk}</div></div>'
-                    f'<div><div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;font-family:monospace">{snum}</div>'
-                    f'<div style="font-size:.68rem;color:{CREAM};opacity:.8;line-height:1.45;margin-top:.04rem">{gloss}</div></div>'
-                    f'</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(
-                f'<div style="font-size:.74rem;color:{LT_GOLD};opacity:.45">'
-                f'Interlinear data available for: {", ".join(INTERLINEAR.keys())}.</div>',
-                unsafe_allow_html=True)
-
-        st.markdown("<hr/>", unsafe_allow_html=True)
-        sec_head("Lexical Analysis — Strong's Index")
-        vtxt_full = " ".join(v.get("text", "") for v in sdata.get("verses", []))
-        matched_lex = [(k, v) for k, v in STRONGS_LEXICON.items()
-                       if k in vtxt_full.lower() or v["tr"].lower() in vtxt_full.lower()][:5]
-        if not matched_lex:
-            matched_lex = list(STRONGS_LEXICON.items())[:3]
-        for term, entry in matched_lex:
-            lc = GOLD if entry["lang"] == "Greek" else SCARLET
-            st.markdown(
-                f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.17);'
-                f'border-left:3px solid {lc};border-radius:3px;padding:.6rem .85rem;margin-bottom:.4rem">'
-                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;letter-spacing:.1em">'
-                f'{entry["num"]} · {entry["tr"]} · {entry["lang"]}</div>'
-                f'<div style="font-size:1.18rem;color:{CREAM};margin:.08rem 0">{entry["gk"]}</div>'
-                f'<div style="font-size:.73rem;color:{LT_GOLD};line-height:1.6">{entry["def"]}</div>'
-                f'</div>', unsafe_allow_html=True)
-
-    # ── Technical Basement ───────────────────────────────────────────────────
-    if sdata.get("verses"):
-        st.markdown("<hr/>", unsafe_allow_html=True)
-        with st.expander("📊  Quantitative Textual Mapping — Semantic Graph & Lexical Frequency"):
-            vtxt_b = " ".join(v.get("text", "") for v in sdata["verses"])
-            h = _hash(vtxt_b + sref)
-            if st.session_state.get("graph_hash") != h:
-                st.session_state.graph_fig  = build_semantic_graph(vtxt_b, sref)
-                st.session_state.graph_hash = h
-            st.markdown(
-                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45;'
-                f'text-align:center;letter-spacing:.12em;margin-bottom:.6rem">'
-                f'PASSAGE → LEXICAL TERMS → DOCTRINAL DOMAINS · '
-                f'Full analysis available in the Textual Mapping view</div>',
-                unsafe_allow_html=True)
-            st.plotly_chart(st.session_state.graph_fig, use_container_width=True)
-
-            words = re.findall(r'\b[a-zA-Z]{4,}\b', vtxt_b.lower())
-            stop  = {"that","this","with","have","from","they","been","were","unto","thou",
-                     "thee","thine","hath","doth","shall","will","your","which","their",
-                     "there","when","what","also"}
-            freq = {}
-            for w in words:
-                if w not in stop:
-                    freq[w] = freq.get(w, 0) + 1
-            if freq:
-                fdf = pd.DataFrame(
-                    sorted(freq.items(), key=lambda x: -x[1])[:15],
-                    columns=["Term", "Frequency"])
+                    f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.62;'
+                    f'letter-spacing:.12em;margin-bottom:.35rem">{sref.upper()} · {tname.upper()}</div>',
+                    unsafe_allow_html=True)
+                vhtml = "".join(
+                    f'<span style="color:{SCARLET};font-weight:600;font-size:.67rem;margin-right:3px">[{v.get("verse","")}]</span>'
+                    f'<span style="color:{CREAM}">{v.get("text","").strip()}</span> '
+                    for v in sdata["verses"])
                 st.markdown(
-                    f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.55;'
-                    f'margin:.5rem 0 .3rem;letter-spacing:.1em;text-align:center">'
-                    f'TOP 15 SUBSTANTIVE TERMS</div>', unsafe_allow_html=True)
-                st.dataframe(fdf, hide_index=True, use_container_width=True)
+                    f'<div style="font-family:IBM Plex Mono,monospace;font-size:.86rem;line-height:2.05;'
+                    f'color:{CREAM};background:{NAVY};border-left:3px solid {GOLD};'
+                    f'padding:.95rem 1.15rem;border-radius:3px;border:1px solid rgba(212,175,55,.16)">'
+                    f'{vhtml}</div>', unsafe_allow_html=True)
 
-
-
-# ══════════════════════════════════════════════
-# TAB 2 — COMMENTARY ENGINE
-# ══════════════════════════════════════════════
-with tab2:
-    sec_head("Commentary Engine", "Analytical summaries of primary scholarly sources")
-    st.markdown(
-        f'<div style="font-size:.7rem;color:{LT_GOLD};opacity:.62;margin-bottom:.6rem;line-height:1.65">'
-        f'All commentary entries are <strong>analytical summaries</strong> of the cited scholarly works, '
-        f'not direct quotations. Consult primary sources for original arguments.</div>',
-        unsafe_allow_html=True)
-
-    psg = st.selectbox("Passage", list(COMMENTARY.keys()), label_visibility="collapsed")
-    cd  = COMMENTARY[psg]
-
-    if st.button("↗ Load in Scripture Lab", key="load_comm"):
-        st.session_state.scripture_data = fetch_scripture(psg, translation)
-        st.session_state.scripture_ref  = psg
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-    sec_head(cd["label"], "Historical & Literary Context")
-    card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["context"]}</div>')
-
-    sec_head("Scholarly Commentary")
-    for s in cd["scholars"]:
-        scholar_card(s["author"], s["work"], s["text"])
-
-    lc, xc = st.columns(2, gap="large")
-    with lc:
-        sec_head("Lexical Notes — Greek & Hebrew")
-        for snum, term, tr, defn in cd["greek"]:
-            st.markdown(
-                f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.16);'
-                f'border-radius:3px;padding:.65rem .85rem;margin-bottom:.45rem">'
-                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;letter-spacing:.1em">{snum} · {tr}</div>'
-                f'<div style="font-size:1.28rem;color:{CREAM};margin:.08rem 0">{term}</div>'
-                f'<div style="font-size:.75rem;color:{LT_GOLD};line-height:1.62">{defn}</div>'
-                f'</div>', unsafe_allow_html=True)
-    with xc:
-        sec_head("Cross-References — TSK")
-        for rstr, note in cd["cross_refs"]:
-            st.markdown(
-                f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.42rem 0">'
-                f'<span class="xref-badge">{rstr}</span>'
-                f'<span style="font-size:.74rem;color:{LT_GOLD};opacity:.8;margin-left:.4rem">{note}</span>'
-                f'</div>', unsafe_allow_html=True)
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-    sec_head("Historical Background")
-    card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["historical"]}</div>', PURPLE)
-    sec_head("Apologetics Interface")
-    card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["apologetics"]}</div>', SCARLET)
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-    sec_head("Church Fathers — Patristic Witness")
-    for f_ in CHURCH_FATHERS:
-        with st.expander(f"{f_['name']} ({f_['dates']}) — {f_['role']}"):
-            st.markdown(
-                f'<div style="font-size:.82rem;color:{CREAM};line-height:1.85;margin-bottom:.35rem">'
-                f'{f_["contribution"]}</div>'
-                f'<div style="font-size:.65rem;color:{GOLD};font-style:italic">'
-                f'Key work: {f_["key_work"]}</div>', unsafe_allow_html=True)
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-    sec_head("Full Strong's Index")
-    lex_rows = [{"Term": k, "Strong's": v["num"], "Transliteration": v["tr"],
-                 "Language": v["lang"], "Definition": v["def"][:78] + "…"}
-                for k, v in STRONGS_LEXICON.items()]
-    st.dataframe(pd.DataFrame(lex_rows), hide_index=True, use_container_width=True)
-
-
-# ══════════════════════════════════════════════
-# TAB 3 — APOLOGETICS
-# ══════════════════════════════════════════════
-with tab3:
-    ac, hc = st.columns([3, 2], gap="large")
-    with ac:
-        sec_head("Eight Core Arguments", "With primary objections and responses")
-        for arg in APOLOGETICS_ARGS:
-            with st.expander(f"{arg['title']}  [{arg['type']}]"):
-                st.markdown(f'<div style="font-size:.82rem;color:{CREAM};line-height:1.88">{arg["content"]}</div>',
-                            unsafe_allow_html=True)
-        st.markdown("<hr/>", unsafe_allow_html=True)
-        sec_head("Recommended Bibliography")
-        BIBLIO = [
-            ("Craig, William Lane", "Reasonable Faith, 3rd ed. (2008)", "Kalam, resurrection, moral argument"),
-            ("Plantinga, Alvin", "Warranted Christian Belief (2000)", "Reformed epistemology"),
-            ("Plantinga, Alvin", "The Nature of Necessity (1974)", "Modal ontological argument"),
-            ("Collins, Robin", "The Well-Tempered Universe (2009)", "Fine-tuning argument"),
-            ("Reppert, Victor", "C.S. Lewis's Dangerous Idea (2003)", "Argument from Reason"),
-            ("Moreland, J.P.", "Consciousness and the Existence of God (2008)", "Argument from consciousness"),
-            ("Wright, N.T.", "The Resurrection of the Son of God (2003)", "Historical resurrection"),
-            ("Habermas & Licona", "The Case for the Resurrection (2004)", "Minimal facts method"),
-            ("Bruce, F.F.", "The NT Documents: Are They Reliable? (1981)", "Bibliographical test"),
-            ("Lennox, John", "God's Undertaker: Has Science Buried God? (2009)", "Science/theism"),
-        ]
-        for auth, work, note in BIBLIO:
-            st.markdown(
-                f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.42rem 0">'
-                f'<div style="font-size:.73rem;color:{GOLD}">{auth}</div>'
-                f'<div style="font-size:.68rem;color:{CREAM};font-style:italic">{work}</div>'
-                f'<div style="font-size:.63rem;color:{LT_GOLD};opacity:.62;margin-top:.04rem">{note}</div>'
-                f'</div>', unsafe_allow_html=True)
-
-    with hc:
-        sec_head("Bibliographical Test")
-        st.plotly_chart(build_mss_chart(), use_container_width=True)
-        sec_head("Textual Transmission Table")
-        st.dataframe(pd.DataFrame([
-            {"Document": "NT (Greek)", "MSS": "5,856", "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
-            {"Document": "NT (all lang.)", "MSS": "25,000+", "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
-            {"Document": "DSS (1QIsa-a)", "MSS": "1", "Earliest": "~125 BC", "Gap": "~350 yrs"},
-            {"Document": "Iliad", "MSS": "643", "Earliest": "~400 BC", "Gap": "400 yrs"},
-            {"Document": "Plato", "MSS": "210", "Earliest": "~895 AD", "Gap": "1,200 yrs"},
-            {"Document": "Caesar", "MSS": "251", "Earliest": "~900 AD", "Gap": "950 yrs"},
-        ]), hide_index=True, use_container_width=True)
-
-        st.markdown("<hr/>", unsafe_allow_html=True)
-        sec_head("Archaeological Confirmation")
-        for disc, conf in [
-            ("Pilate Inscription (1961)",   "Pontius Pilate as prefect of Judea"),
-            ("Pool of Siloam (2004)",        "John 9:7 — healing of the blind man"),
-            ("Caiaphas Ossuary (1990)",      "High priest of the Passion narratives"),
-            ("Tel Dan Stele (9th c. BC)",    "'House of David' — extra-biblical attestation"),
-            ("Dead Sea Scrolls (1947)",      "OT textual stability; 1QIsa-a predates Christ"),
-            ("House of Peter, Capernaum",   "Mark 1:29 — 1st-century veneration continuous"),
-        ]:
-            st.markdown(
-                f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.38rem 0">'
-                f'<div style="font-size:.7rem;color:{GOLD}">{disc}</div>'
-                f'<div style="font-size:.65rem;color:{CREAM};opacity:.8">{conf}</div>'
-                f'</div>', unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════
-# TAB 4 — RESEARCH PROMPTS
-# ══════════════════════════════════════════════
-with tab4:
-    sec_head("Research Prompts", "Graduate-level inquiry across five domains")
-    CAT_META = {
-        "Exegetical":         "📖 Exegetical",
-        "Doctrinal":          "🏛 Doctrinal",
-        "Historical":         "⏳ Historical",
-        "Apologetics":        "⚔ Apologetics",
-        "Theological Debates":"⚖ Theological Debates",
-    }
-    CAT_DESC = {
-        "Exegetical":         "Greek/Hebrew word studies, grammatical analysis, textual-critical disputes.",
-        "Doctrinal":          "Systematic theology — the great loci of Christian doctrine examined through Scripture and tradition.",
-        "Historical":         "Canon formation, textual transmission, archaeology, and history of interpretation.",
-        "Apologetics":        "Philosophical and evidential questions — the intellectual defense of Christian truth claims.",
-        "Theological Debates":"Live internal debates within evangelical scholarship, presented without editorial advocacy.",
-    }
-    cat = st.selectbox("Category", list(STUDY_PROMPTS.keys()),
-                       label_visibility="collapsed",
-                       format_func=lambda x: CAT_META[x])
-    st.markdown(f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.52;margin-bottom:.8rem">{CAT_DESC[cat]}</div>',
-                unsafe_allow_html=True)
-    for i, prompt in enumerate(STUDY_PROMPTS[cat], 1):
-        pc, bc = st.columns([8, 2])
-        with pc:
-            st.markdown(
-                f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.14);'
-                f'border-left:3px solid {GOLD};border-radius:3px;padding:.75rem .95rem;margin-bottom:.45rem">'
-                f'<div style="font-size:.56rem;color:{LT_GOLD};opacity:.38;letter-spacing:.12em;margin-bottom:.22rem">'
-                f'{cat.upper()} {i:02d}</div>'
-                f'<div style="font-size:.84rem;color:{CREAM};line-height:1.78">{prompt}</div>'
-                f'</div>', unsafe_allow_html=True)
-        with bc:
-            if st.button("Send to AI", key=f"p_{cat}_{i}",
-                         use_container_width=True, disabled=not anthropic_key):
-                st.session_state.inq_response = ai_single(prompt, anthropic_key, 2200)
-                st.session_state.inq_text     = prompt
-                st.rerun()
-
-    st.markdown("<hr/>", unsafe_allow_html=True)
-    sec_head("Commentary Series Reference")
-    st.dataframe(pd.DataFrame([
-        {"Abbrev.": "ICC",    "Series": "International Critical Commentary",   "Character": "Philologically rigorous; multi-author"},
-        {"Abbrev.": "NICNT",  "Series": "New International Commentary — NT",   "Character": "Evangelical; solid exegesis"},
-        {"Abbrev.": "NIGTC",  "Series": "New International Greek Testament Commentary", "Character": "Greek text focus; advanced"},
-        {"Abbrev.": "WBC",    "Series": "Word Biblical Commentary",            "Character": "Mixed; includes textual notes"},
-        {"Abbrev.": "BECNT",  "Series": "Baker Exegetical Commentary",         "Character": "Evangelical; Greek text"},
-        {"Abbrev.": "Pillar", "Series": "Pillar NT Commentary (Carson)",       "Character": "Balanced; recommended"},
-        {"Abbrev.": "AB",     "Series": "Anchor Bible",                        "Character": "Critical-historical; definitive philology"},
-        {"Abbrev.": "TOTC",   "Series": "Tyndale OT/NT Commentaries",         "Character": "Accessible evangelical introduction"},
-    ]), hide_index=True, use_container_width=True)
-
-
-# ══════════════════════════════════════════════
-# TAB 5 — THEOLOGICAL DEBATES
-# ══════════════════════════════════════════════
-with tab5:
-    sec_head("Theological Debates", "Live internal debates — no editorial advocacy")
-    st.markdown(
-        f'<div style="font-size:.76rem;color:{LT_GOLD};opacity:.68;line-height:1.75;margin-bottom:.7rem">'
-        f'Each debate presents the strongest arguments for each position from primary advocates. '
-        f'No editorial position is taken.</div>', unsafe_allow_html=True)
-
-    DEBATES = {
-        "Calvinism vs. Arminianism — Election & Perseverance": {
-            "calvinist": {
-                "label": "Reformed / Calvinist Position",
-                "advocates": "John Calvin, Francis Turretin, John Owen, B.B. Warfield, John Murray, Thomas Schreiner, J.I. Packer",
-                "argument": "Romans 9:6–24 establishes individual unconditional election: God's choice of Jacob over Esau is made 'before they were born or had done anything good or bad' (v. 11), explicitly excluding foreseen merit. The phrase 'I will have mercy on whom I have mercy' (v. 15, citing Ex 33:19) grounds election in divine sovereignty, not human response. The 'golden chain' of Romans 8:29–30 (foreknew → predestined → called → justified → glorified) presents an unbroken, infallible sequence — no link can be broken. John 6:37–44 reinforces this: 'All that the Father gives me will come to me' (v. 37); 'No one can come to me unless the Father who sent me draws him' (v. 44). The verb 'draws' (ἕλκω, helkō) is the same used in John 21:11 of dragging a net — an effectual, irresistible drawing. 1 John 2:19 ('they went out from us because they were never of us') interprets apostasy not as loss of salvation but as evidence of non-election.",
-            },
-            "arminian": {
-                "label": "Arminian / Open Grace Position",
-                "advocates": "Jacob Arminius, John Wesley, Roger Olson, William Klein, F. Leroy Forlines",
-                "argument": "Romans 9 is about corporate election (the election of a people, not individuals to salvation) — the context is the faithfulness of God's covenant promises to Israel (v. 6: 'the word of God has not failed'), not the predestination of individuals. Jacob and Esau represent nations, not individuals selected for salvation or damnation (cf. Mal 1:2–3 which refers to nations). 1 Peter 1:1–2 presents election as 'according to the foreknowledge of God the Father' — God elects those whom he foreknows will respond in faith. John 6:37–44 concerns the context of believing disciples who are kept, not a deterministic decree. The 'drawing' of the Father (v. 44) is available to all: Jesus says 'I will draw all men to myself' (12:32), using the same verb. Arminian perseverance (conditional security): the same passages that promise security (John 10:28–29) assume the sheep are hearing and following (v. 27); apostasy texts (Heb 6:4–6; 10:26–29) warn genuine believers of genuine danger.",
-            },
-            "key_texts": ["Romans 9:6–24", "John 6:37–44", "1 John 2:19", "1 Peter 1:1–2", "Hebrews 6:4–6"],
-        },
-        "Inerrancy — Warfield vs. Enns vs. Vanhoozer": {
-            "position_a": {
-                "label": "Plenary Verbal Inerrancy (Warfield)",
-                "advocates": "B.B. Warfield, Charles Hodge, Wayne Grudem, D.A. Carson, John Frame (Chicago Statement, 1978)",
-                "argument": "2 Timothy 3:16 ('all Scripture is θεόπνευστος, God-breathed') and 2 Peter 1:21 ('men spoke from God as they were carried along by the Holy Spirit') establish a concursive theory of inspiration: the divine and human authorship are simultaneous and non-competitive. The divine authorship guarantees inerrancy; the human authorship preserves genuine literary variety. The Chicago Statement (1978) defines inerrancy: 'Scripture in the original manuscripts does not affirm anything that is contrary to fact.' This applies to all domains in which Scripture speaks — not only theology but historical and cosmological matters insofar as they are affirmed.",
-            },
-            "position_b": {
-                "label": "Incarnational / Cultural Model (Enns)",
-                "advocates": "Peter Enns (Inspiration and Incarnation, 2005), Kenton Sparks",
-                "argument": "The Incarnation provides the controlling analogy: as Christ was fully divine and fully human (including genuine human limitations), so Scripture is fully divine and fully human (including genuine cultural limitations). This means the ANE cosmological assumptions embedded in Genesis 1–2 are genuine features of the text — not errors but evidence of God accommodating his self-revelation to the idiom of its cultural moment. Inerrancy defined as 'what Scripture intends to affirm is true' preserves theological inerrancy while allowing for cultural embeddedness. Enns's critics (Trueman, Helm) argue this model cannot explain how divine accommodation includes factual errors without impugning divine truthfulness.",
-            },
-            "position_c": {
-                "label": "Theodramatic Canonics (Vanhoozer)",
-                "advocates": "Kevin Vanhoozer (The Drama of Doctrine, 2005; Biblical Authority After Babel, 2016)",
-                "argument": "Vanhoozer proposes a speech-act theory of inspiration: Scripture's inerrancy applies to its illocutionary acts (what the text is doing — asserting, commanding, promising) rather than its locutions (the bare propositional content). This allows for literary genres to function appropriately: a poetic hyperbole is not inerrant if read as a scientific claim; it is inerrant as hyperbole. The Reformation's sola scriptura is preserved without the naive textual positivism of fundamentalism. Critics (Schreiner, Frame) argue Vanhoozer's model is ultimately indeterminate — who decides which speech acts are assertions and which are performatives?",
-            },
-            "key_texts": ["2 Tim 3:16", "2 Pet 1:20–21", "Matt 5:18", "John 10:35"],
-        },
-        "Annihilationism vs. Eternal Conscious Torment": {
-            "ect": {
-                "label": "Eternal Conscious Torment (ECT)",
-                "advocates": "Augustine, Aquinas, Jonathan Edwards, J.I. Packer, Robert Peterson, Denny Burk",
-                "argument": "Revelation 14:9–11: 'The smoke of their torment goes up forever and ever (εἰς αἰῶνας αἰώνων), and they have no rest day or night.' The phrase εἰς αἰῶνας αἰώνων is the strongest temporal expression available in Greek and is used of God's eternal existence (Rev 4:9–10) — applying it to torment and then denying its duration is inconsistent. Matthew 25:46 uses the same adjective (αἰώνιος) for both punishment and life — 'eternal punishment' and 'eternal life.' If αἰώνιος means 'of limited duration' for punishment, it must mean the same for life — a conclusion no evangelical accepts. 2 Thessalonians 1:9 ('eternal destruction') uses ὄλεθρος (olethros) — destruction, but in context modified by 'from the face of the Lord,' suggesting banishment rather than cessation of existence.",
-            },
-            "anni": {
-                "label": "Conditionalism / Annihilationism",
-                "advocates": "Edward Fudge (The Fire That Consumes), John Stott, N.T. Wright, Clark Pinnock",
-                "argument": "αἰώνιος denotes quality ('of the age to come') not necessarily infinite duration — it is used of the 'eternal' fire of Sodom (Jude 7) which is manifestly no longer burning. The smoke ascending 'forever' (Rev 14:11) is OT prophetic imagery for complete and final destruction (cf. Isa 34:9–10 of Edom — never literally fulfilled as perpetual smoke). 2 Thess 1:9 'eternal destruction' (ὄλεθρος) best denotes complete destruction whose effects are permanent, not a continuing process. Fudge: the biblical metaphor for hell is fire, which consumes; the fire of hell achieves its purpose — it doesn't burn forever, it destroys completely and permanently. 'Eternal' modifies the result, not the process. The soul's immortality is not a biblical datum; it is a Greek philosophical assumption imported into Christian anthropology.",
-            },
-            "key_texts": ["Rev 14:9–11", "Matt 25:46", "2 Thess 1:9", "Jude 7", "Isa 34:9–10"],
-        },
-        "Open Theism vs. Classical Divine Foreknowledge": {
-            "classical": {
-                "label": "Classical Theism — Exhaustive Divine Foreknowledge",
-                "advocates": "Augustine, Calvin, Aquinas, Helm, Frame, Ware",
-                "argument": "Isaiah 46:9–10: 'I am God and there is no other... declaring the end from the beginning.' God's foreknowledge of specific human choices (Isa 44:28 — Cyrus named 150 years before his birth; Ps 139:4 — God knows our words before we speak them) requires exhaustive knowledge of future contingents. The Molinist solution (Plantinga, Craig): God has 'middle knowledge' of all counterfactuals of creaturely freedom — he knows what every free creature would do in every possible circumstance. This reconciles libertarian human freedom with exhaustive divine foreknowledge without making God the author of sin. Divine timelessness (Aquinas, Helm): God exists in an 'eternal present' — he does not 'foreknow' but simply knows all events in his atemporal perspective.",
-            },
-            "open": {
-                "label": "Open Theism",
-                "advocates": "Gregory Boyd (God of the Possible), Clark Pinnock (The Openness of God), John Sanders",
-                "argument": "The biblical narrative of divine repentance (Gen 6:6: 'the LORD was grieved that he had made man'; Ex 32:14: 'the LORD relented from the disaster'; Jonah 3:10) implies a genuine change in God's intentions — genuine regret is incoherent if God always knew things would unfold as they did. Divine inquiry (Gen 3:9: 'Where are you?'; Gen 18:21: 'I will go down and see whether they have done altogether according to the outcry') implies genuine uncertainty. The best interpretation of these texts is not anthropomorphism but literal: God genuinely does not know with certainty what free creatures will choose, and this is not a deficiency but a feature of the relational God who created genuinely free agents. Critics (Frame, Ware) argue Open Theism's God cannot guarantee prophetic fulfillments that require specific human choices.",
-            },
-            "key_texts": ["Gen 6:6", "Isa 46:9–10", "Isa 44:28", "Ex 32:14", "Ps 139:4"],
-        },
-    }
-
-    for debate_title, debate_data in DEBATES.items():
-        with st.expander(debate_title):
-            keys = [k for k in debate_data if k != "key_texts"]
-            if "key_texts" in debate_data:
-                refs_html = " ".join(
-                    f'<span class="xref-badge">{r}</span>' for r in debate_data["key_texts"])
-                st.markdown(
-                    f'<div style="margin-bottom:.65rem">'
-                    f'<strong style="font-size:.63rem;color:{LT_GOLD};opacity:.62;letter-spacing:.1em">KEY TEXTS: </strong>'
-                    f'{refs_html}</div>', unsafe_allow_html=True)
-            for key in keys:
-                pos = debate_data[key]
-                st.markdown(
-                    f'<div class="scholar-card">'
-                    f'<div style="font-family:Georgia,serif;font-size:.91rem;font-weight:600;color:{GOLD};margin-bottom:.12rem">{pos["label"]}</div>'
-                    f'<div style="font-size:.61rem;color:{LT_GOLD};opacity:.62;margin-bottom:.45rem;font-style:italic">Advocates: {pos["advocates"]}</div>'
-                    f'<div style="font-size:.82rem;color:{CREAM};line-height:1.88">{pos["argument"]}</div>'
-                    f'</div>', unsafe_allow_html=True)
-                sk = f"sm_{debate_title}_{key}"
-                rk = f"sm_r_{debate_title}_{key}"
-                bc, nc = st.columns([2, 5])
-                with bc:
-                    if st.button("⚡ STEELMAN THIS", key=sk,
-                                 use_container_width=True, disabled=not anthropic_key):
-                        st.session_state[rk] = ai_steelman(
-                            debate_title, pos["label"], pos["argument"],
-                            debate_data.get("key_texts", []), anthropic_key)
-                with nc:
+            # AI Passage Analyst
+            if sdata.get("verses"):
+                st.markdown("<hr/>", unsafe_allow_html=True)
+                sec_head("AI Passage Analysis")
+                ab, nb = st.columns([2, 5])
+                with ab:
+                    analyse = st.button("⚡ ANALYSE PASSAGE", key="analyse_btn",
+                                        use_container_width=True, disabled=not anthropic_key)
+                with nb:
                     if not anthropic_key:
+                        st.markdown(f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.42;'
+                                    f'padding-top:.45rem">Add ANTHROPIC_API_KEY to enable.</div>',
+                                    unsafe_allow_html=True)
+                if analyse:
+                    vtxt  = " ".join(v.get("text", "").strip() for v in sdata["verses"])
+                    tlbl  = {"kjv": "KJV", "web": "WEB", "bbe": "BBE"}.get(translation, "KJV")
+                    result = ai_analyse_passage(sref, vtxt, tlbl, anthropic_key)
+                    st.session_state.ai_analysis     = result
+                    st.session_state.ai_analysis_ref = sref
+
+                if (st.session_state.get("ai_analysis")
+                        and st.session_state.get("ai_analysis_ref") == sref):
+                    parchment(st.session_state.ai_analysis)
+
+            # Parallel translations
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("Parallel Translations")
+            if esv_key:
+                with st.expander("English Standard Version (ESV)", expanded=True):
+                    edata = fetch_esv(sref, esv_key)
+                    if edata.get("verses"):
+                        ehtml = " ".join(
+                            f'<span style="color:{SCARLET};font-weight:600;font-size:.67rem;margin-right:3px">[{v.get("verse","")}]</span>'
+                            + v.get("text", "").strip()
+                            for v in edata["verses"])
+                        st.markdown(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.95">{ehtml}</div>',
+                                    unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div style="font-size:.75rem;color:{SCARLET}">{edata.get("error","")}</div>',
+                                    unsafe_allow_html=True)
+            for alt in ["kjv", "web", "bbe"]:
+                if alt != translation:
+                    lbl = {"kjv": "King James Version", "web": "World English Bible",
+                           "bbe": "Basic English Bible"}[alt]
+                    with st.expander(lbl):
+                        ad = fetch_scripture(sref, alt)
+                        if ad.get("verses"):
+                            st.markdown(
+                                f'<div style="font-size:.84rem;color:{CREAM};line-height:1.9">'
+                                + " ".join(v.get("text","") for v in ad["verses"]) + '</div>',
+                                unsafe_allow_html=True)
+            if api_key and premium_trans:
+                with st.expander(f"{premium_trans} (API.Bible)"):
+                    pd_data = fetch_apibible(sref, APIBIBLE_TRANSLATIONS[premium_trans], api_key)
+                    if pd_data.get("verses"):
                         st.markdown(
-                            f'<div style="font-size:.64rem;color:{LT_GOLD};opacity:.38;padding-top:.38rem">'
-                            f'Add ANTHROPIC_API_KEY to enable.</div>', unsafe_allow_html=True)
-                if st.session_state.get(rk):
+                            f'<div style="font-size:.84rem;color:{CREAM};line-height:1.9">'
+                            + " ".join(v.get("text","") for v in pd_data["verses"]) + '</div>',
+                            unsafe_allow_html=True)
+
+        with right_col:
+            sec_head("Interlinear Analysis")
+            ikey = next((k for k in INTERLINEAR
+                         if k.lower().replace(" ", "") in sref.lower().replace(" ", "")), None)
+            if ikey:
+                st.markdown(
+                    f'<div style="font-size:.65rem;color:{LT_GOLD};opacity:.62;margin-bottom:.45rem">'
+                    f'Word-by-word · Strong\'s numbers</div>', unsafe_allow_html=True)
+                for eng, gk, snum, gloss in INTERLINEAR[ikey]:
                     st.markdown(
-                        f'<div style="margin-bottom:.35rem;font-size:.58rem;color:{SCARLET};letter-spacing:.12em">'
-                        f'AI STEELMAN — {pos["label"].upper()}</div>', unsafe_allow_html=True)
-                    parchment(st.session_state[rk])
-                    if st.button("✕ Clear", key=f"cl_{sk}"):
-                        del st.session_state[rk]
+                        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.25rem;'
+                        f'border-bottom:1px solid rgba(212,175,55,.09);padding:.3rem 0">'
+                        f'<div><div style="font-size:.68rem;color:{CREAM};font-weight:500">{eng}</div>'
+                        f'<div style="font-size:1.08rem;color:{GOLD};margin-top:.04rem">{gk}</div></div>'
+                        f'<div><div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;font-family:monospace">{snum}</div>'
+                        f'<div style="font-size:.68rem;color:{CREAM};opacity:.8;line-height:1.45;margin-top:.04rem">{gloss}</div></div>'
+                        f'</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f'<div style="font-size:.74rem;color:{LT_GOLD};opacity:.45">'
+                    f'Interlinear data available for: {", ".join(INTERLINEAR.keys())}.</div>',
+                    unsafe_allow_html=True)
+
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("Lexical Analysis — Strong's Index")
+            vtxt_full = " ".join(v.get("text", "") for v in sdata.get("verses", []))
+            matched_lex = [(k, v) for k, v in STRONGS_LEXICON.items()
+                           if k in vtxt_full.lower() or v["tr"].lower() in vtxt_full.lower()][:5]
+            if not matched_lex:
+                matched_lex = list(STRONGS_LEXICON.items())[:3]
+            for term, entry in matched_lex:
+                lc = GOLD if entry["lang"] == "Greek" else SCARLET
+                st.markdown(
+                    f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.17);'
+                    f'border-left:3px solid {lc};border-radius:3px;padding:.6rem .85rem;margin-bottom:.4rem">'
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;letter-spacing:.1em">'
+                    f'{entry["num"]} · {entry["tr"]} · {entry["lang"]}</div>'
+                    f'<div style="font-size:1.18rem;color:{CREAM};margin:.08rem 0">{entry["gk"]}</div>'
+                    f'<div style="font-size:.73rem;color:{LT_GOLD};line-height:1.6">{entry["def"]}</div>'
+                    f'</div>', unsafe_allow_html=True)
+
+        # ── Technical Basement ───────────────────────────────────────────────────
+        if sdata.get("verses"):
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            with st.expander("📊  Quantitative Textual Mapping — Semantic Graph & Lexical Frequency"):
+                vtxt_b = " ".join(v.get("text", "") for v in sdata["verses"])
+                h = _hash(vtxt_b + sref)
+                if st.session_state.get("graph_hash") != h:
+                    st.session_state.graph_fig  = build_semantic_graph(vtxt_b, sref)
+                    st.session_state.graph_hash = h
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45;'
+                    f'text-align:center;letter-spacing:.12em;margin-bottom:.6rem">'
+                    f'PASSAGE → LEXICAL TERMS → DOCTRINAL DOMAINS · '
+                    f'Full analysis available in the Textual Mapping view</div>',
+                    unsafe_allow_html=True)
+                st.plotly_chart(st.session_state.graph_fig, use_container_width=True)
+
+                words = re.findall(r'\b[a-zA-Z]{4,}\b', vtxt_b.lower())
+                stop  = {"that","this","with","have","from","they","been","were","unto","thou",
+                         "thee","thine","hath","doth","shall","will","your","which","their",
+                         "there","when","what","also"}
+                freq = {}
+                for w in words:
+                    if w not in stop:
+                        freq[w] = freq.get(w, 0) + 1
+                if freq:
+                    fdf = pd.DataFrame(
+                        sorted(freq.items(), key=lambda x: -x[1])[:15],
+                        columns=["Term", "Frequency"])
+                    st.markdown(
+                        f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.55;'
+                        f'margin:.5rem 0 .3rem;letter-spacing:.1em;text-align:center">'
+                        f'TOP 15 SUBSTANTIVE TERMS</div>', unsafe_allow_html=True)
+                    st.dataframe(fdf, hide_index=True, use_container_width=True)
 
 
-# ══════════════════════════════════════════════
-# TAB 6 — AI SCHOLAR  (persistent chat)
-# ══════════════════════════════════════════════
-with tab6:
-    sec_head("AI Scholar", "Graduate-level biblical research — persistent conversation")
-    if not anthropic_key:
-        card(
-            f'<div style="font-size:.83rem;color:{CREAM};line-height:1.78">'
-            f'<strong style="color:{GOLD}">API key not configured.</strong><br>'
-            f'Add <code>ANTHROPIC_API_KEY = "sk-ant-..."</code> to Streamlit secrets '
-            f'(Dashboard → Settings → Secrets).</div>', SCARLET)
-    else:
+
+    # ══════════════════════════════════════════════
+    # TAB 2 — COMMENTARY ENGINE
+    # ══════════════════════════════════════════════
+    with tab2:
+        sec_head("Commentary Engine", "Analytical summaries of primary scholarly sources")
         st.markdown(
-            f'<div style="font-size:.76rem;color:{LT_GOLD};opacity:.68;line-height:1.75;margin-bottom:.65rem">'
-            f'Persistent conversation with the AI Scholar. Context maintained across turns. '
-            f'All responses render in parchment view.</div>', unsafe_allow_html=True)
+            f'<div style="font-size:.7rem;color:{LT_GOLD};opacity:.62;margin-bottom:.6rem;line-height:1.65">'
+            f'All commentary entries are <strong>analytical summaries</strong> of the cited scholarly works, '
+            f'not direct quotations. Consult primary sources for original arguments.</div>',
+            unsafe_allow_html=True)
 
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
+        psg = st.selectbox("Passage", list(COMMENTARY.keys()), label_visibility="collapsed")
+        cd  = COMMENTARY[psg]
 
-        sec_head("Quick Prompts")
-        QP = [
-            "What is the exegetical case for penal substitutionary atonement from Romans 3:21–26?",
-            "Explain Plantinga's modal ontological argument and the strongest objection to it.",
-            "What does μορφῇ θεοῦ in Philippians 2:6 mean and why does it matter for Christology?",
-            "Summarise the Calvinism/Arminianism debate on Romans 9 — strongest exegetical arguments on each side.",
-            "What is the historical case for the resurrection using only the minimal facts method?",
-            "How do the Dead Sea Scrolls bear on the reliability of the Old Testament text?",
-            "What is the difference between propitiation and expiation in Romans 3:25?",
-            "Explain the fine-tuning argument and the multiverse objection to it.",
-        ]
-        qc1, qc2 = st.columns(2)
-        for i, qp in enumerate(QP):
-            with (qc1 if i % 2 == 0 else qc2):
-                if st.button(qp[:66] + ("…" if len(qp) > 66 else ""),
-                             key=f"qp_{i}", use_container_width=True):
-                    st.session_state.chat_history.append({"role": "user", "content": qp})
-                    reply = ai(st.session_state.chat_history, anthropic_key)
-                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        if st.button("↗ Load in Scripture Lab", key="load_comm"):
+            st.session_state.scripture_data = fetch_scripture(psg, translation)
+            st.session_state.scripture_ref  = psg
+
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head(cd["label"], "Historical & Literary Context")
+        card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["context"]}</div>')
+
+        sec_head("Scholarly Commentary")
+        for s in cd["scholars"]:
+            scholar_card(s["author"], s["work"], s["text"])
+
+        lc, xc = st.columns(2, gap="large")
+        with lc:
+            sec_head("Lexical Notes — Greek & Hebrew")
+            for snum, term, tr, defn in cd["greek"]:
+                st.markdown(
+                    f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.16);'
+                    f'border-radius:3px;padding:.65rem .85rem;margin-bottom:.45rem">'
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.68;letter-spacing:.1em">{snum} · {tr}</div>'
+                    f'<div style="font-size:1.28rem;color:{CREAM};margin:.08rem 0">{term}</div>'
+                    f'<div style="font-size:.75rem;color:{LT_GOLD};line-height:1.62">{defn}</div>'
+                    f'</div>', unsafe_allow_html=True)
+        with xc:
+            sec_head("Cross-References — TSK")
+            for rstr, note in cd["cross_refs"]:
+                st.markdown(
+                    f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.42rem 0">'
+                    f'<span class="xref-badge">{rstr}</span>'
+                    f'<span style="font-size:.74rem;color:{LT_GOLD};opacity:.8;margin-left:.4rem">{note}</span>'
+                    f'</div>', unsafe_allow_html=True)
+
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Historical Background")
+        card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["historical"]}</div>', PURPLE)
+        sec_head("Apologetics Interface")
+        card(f'<div style="font-size:.85rem;color:{CREAM};line-height:1.88">{cd["apologetics"]}</div>', SCARLET)
+
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Church Fathers — Patristic Witness")
+        for f_ in CHURCH_FATHERS:
+            with st.expander(f"{f_['name']} ({f_['dates']}) — {f_['role']}"):
+                st.markdown(
+                    f'<div style="font-size:.82rem;color:{CREAM};line-height:1.85;margin-bottom:.35rem">'
+                    f'{f_["contribution"]}</div>'
+                    f'<div style="font-size:.65rem;color:{GOLD};font-style:italic">'
+                    f'Key work: {f_["key_work"]}</div>', unsafe_allow_html=True)
+
+        st.markdown("<hr/>", unsafe_allow_html=True)
+        sec_head("Full Strong's Index")
+        lex_rows = [{"Term": k, "Strong's": v["num"], "Transliteration": v["tr"],
+                     "Language": v["lang"], "Definition": v["def"][:78] + "…"}
+                    for k, v in STRONGS_LEXICON.items()]
+        st.dataframe(pd.DataFrame(lex_rows), hide_index=True, use_container_width=True)
+
+
+    # ══════════════════════════════════════════════
+    # TAB 3 — APOLOGETICS
+    # ══════════════════════════════════════════════
+    with tab3:
+        ac, hc = st.columns([3, 2], gap="large")
+        with ac:
+            sec_head("Eight Core Arguments", "With primary objections and responses")
+            for arg in APOLOGETICS_ARGS:
+                with st.expander(f"{arg['title']}  [{arg['type']}]"):
+                    st.markdown(f'<div style="font-size:.82rem;color:{CREAM};line-height:1.88">{arg["content"]}</div>',
+                                unsafe_allow_html=True)
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("Recommended Bibliography")
+            BIBLIO = [
+                ("Craig, William Lane", "Reasonable Faith, 3rd ed. (2008)", "Kalam, resurrection, moral argument"),
+                ("Plantinga, Alvin", "Warranted Christian Belief (2000)", "Reformed epistemology"),
+                ("Plantinga, Alvin", "The Nature of Necessity (1974)", "Modal ontological argument"),
+                ("Collins, Robin", "The Well-Tempered Universe (2009)", "Fine-tuning argument"),
+                ("Reppert, Victor", "C.S. Lewis's Dangerous Idea (2003)", "Argument from Reason"),
+                ("Moreland, J.P.", "Consciousness and the Existence of God (2008)", "Argument from consciousness"),
+                ("Wright, N.T.", "The Resurrection of the Son of God (2003)", "Historical resurrection"),
+                ("Habermas & Licona", "The Case for the Resurrection (2004)", "Minimal facts method"),
+                ("Bruce, F.F.", "The NT Documents: Are They Reliable? (1981)", "Bibliographical test"),
+                ("Lennox, John", "God's Undertaker: Has Science Buried God? (2009)", "Science/theism"),
+            ]
+            for auth, work, note in BIBLIO:
+                st.markdown(
+                    f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.42rem 0">'
+                    f'<div style="font-size:.73rem;color:{GOLD}">{auth}</div>'
+                    f'<div style="font-size:.68rem;color:{CREAM};font-style:italic">{work}</div>'
+                    f'<div style="font-size:.63rem;color:{LT_GOLD};opacity:.62;margin-top:.04rem">{note}</div>'
+                    f'</div>', unsafe_allow_html=True)
+
+        with hc:
+            sec_head("Bibliographical Test")
+            st.plotly_chart(build_mss_chart(), use_container_width=True)
+            sec_head("Textual Transmission Table")
+            st.dataframe(pd.DataFrame([
+                {"Document": "NT (Greek)", "MSS": "5,856", "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
+                {"Document": "NT (all lang.)", "MSS": "25,000+", "Earliest": "P52 ~AD 125", "Gap": "25 yrs"},
+                {"Document": "DSS (1QIsa-a)", "MSS": "1", "Earliest": "~125 BC", "Gap": "~350 yrs"},
+                {"Document": "Iliad", "MSS": "643", "Earliest": "~400 BC", "Gap": "400 yrs"},
+                {"Document": "Plato", "MSS": "210", "Earliest": "~895 AD", "Gap": "1,200 yrs"},
+                {"Document": "Caesar", "MSS": "251", "Earliest": "~900 AD", "Gap": "950 yrs"},
+            ]), hide_index=True, use_container_width=True)
+
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("Archaeological Confirmation")
+            for disc, conf in [
+                ("Pilate Inscription (1961)",   "Pontius Pilate as prefect of Judea"),
+                ("Pool of Siloam (2004)",        "John 9:7 — healing of the blind man"),
+                ("Caiaphas Ossuary (1990)",      "High priest of the Passion narratives"),
+                ("Tel Dan Stele (9th c. BC)",    "'House of David' — extra-biblical attestation"),
+                ("Dead Sea Scrolls (1947)",      "OT textual stability; 1QIsa-a predates Christ"),
+                ("House of Peter, Capernaum",   "Mark 1:29 — 1st-century veneration continuous"),
+            ]:
+                st.markdown(
+                    f'<div style="border-bottom:1px solid rgba(212,175,55,.07);padding:.38rem 0">'
+                    f'<div style="font-size:.7rem;color:{GOLD}">{disc}</div>'
+                    f'<div style="font-size:.65rem;color:{CREAM};opacity:.8">{conf}</div>'
+                    f'</div>', unsafe_allow_html=True)
+
+
+    # ══════════════════════════════════════════════
+    # TAB 4 — RESEARCH PROMPTS
+    # ══════════════════════════════════════════════
+    with tab4:
+        sec_head("Research Prompts", "Graduate-level inquiry across five domains")
+        CAT_META = {
+            "Exegetical":         "📖 Exegetical",
+            "Doctrinal":          "🏛 Doctrinal",
+            "Historical":         "⏳ Historical",
+            "Apologetics":        "⚔ Apologetics",
+            "Theological Debates":"⚖ Theological Debates",
+        }
+        CAT_DESC = {
+            "Exegetical":         "Greek/Hebrew word studies, grammatical analysis, textual-critical disputes.",
+            "Doctrinal":          "Systematic theology — the great loci of Christian doctrine examined through Scripture and tradition.",
+            "Historical":         "Canon formation, textual transmission, archaeology, and history of interpretation.",
+            "Apologetics":        "Philosophical and evidential questions — the intellectual defense of Christian truth claims.",
+            "Theological Debates":"Live internal debates within evangelical scholarship, presented without editorial advocacy.",
+        }
+        cat = st.selectbox("Category", list(STUDY_PROMPTS.keys()),
+                           label_visibility="collapsed",
+                           format_func=lambda x: CAT_META[x])
+        st.markdown(f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.52;margin-bottom:.8rem">{CAT_DESC[cat]}</div>',
+                    unsafe_allow_html=True)
+        for i, prompt in enumerate(STUDY_PROMPTS[cat], 1):
+            pc, bc = st.columns([8, 2])
+            with pc:
+                st.markdown(
+                    f'<div style="background:{NAVY};border:1px solid rgba(212,175,55,.14);'
+                    f'border-left:3px solid {GOLD};border-radius:3px;padding:.75rem .95rem;margin-bottom:.45rem">'
+                    f'<div style="font-size:.56rem;color:{LT_GOLD};opacity:.38;letter-spacing:.12em;margin-bottom:.22rem">'
+                    f'{cat.upper()} {i:02d}</div>'
+                    f'<div style="font-size:.84rem;color:{CREAM};line-height:1.78">{prompt}</div>'
+                    f'</div>', unsafe_allow_html=True)
+            with bc:
+                if st.button("Send to AI", key=f"p_{cat}_{i}",
+                             use_container_width=True, disabled=not anthropic_key):
+                    st.session_state.inq_response = ai_single(prompt, anthropic_key, 2200)
+                    st.session_state.inq_text     = prompt
                     st.rerun()
 
         st.markdown("<hr/>", unsafe_allow_html=True)
-        sec_head("Conversation")
-        for msg in st.session_state.chat_history:
-            if msg["role"] == "user":
-                st.markdown(
-                    f'<div style="background:{BIB_BLUE};border-radius:4px;padding:.62rem .88rem;'
-                    f'margin-bottom:.38rem;font-size:.82rem;color:{CREAM};line-height:1.72">'
-                    f'<span style="font-size:.56rem;color:{LT_GOLD};opacity:.62;letter-spacing:.1em">YOU</span><br>'
-                    f'{msg["content"]}</div>', unsafe_allow_html=True)
-            else:
-                parchment(msg["content"])
+        sec_head("Commentary Series Reference")
+        st.dataframe(pd.DataFrame([
+            {"Abbrev.": "ICC",    "Series": "International Critical Commentary",   "Character": "Philologically rigorous; multi-author"},
+            {"Abbrev.": "NICNT",  "Series": "New International Commentary — NT",   "Character": "Evangelical; solid exegesis"},
+            {"Abbrev.": "NIGTC",  "Series": "New International Greek Testament Commentary", "Character": "Greek text focus; advanced"},
+            {"Abbrev.": "WBC",    "Series": "Word Biblical Commentary",            "Character": "Mixed; includes textual notes"},
+            {"Abbrev.": "BECNT",  "Series": "Baker Exegetical Commentary",         "Character": "Evangelical; Greek text"},
+            {"Abbrev.": "Pillar", "Series": "Pillar NT Commentary (Carson)",       "Character": "Balanced; recommended"},
+            {"Abbrev.": "AB",     "Series": "Anchor Bible",                        "Character": "Critical-historical; definitive philology"},
+            {"Abbrev.": "TOTC",   "Series": "Tyndale OT/NT Commentaries",         "Character": "Accessible evangelical introduction"},
+        ]), hide_index=True, use_container_width=True)
 
-        user_in = st.text_input(
-            "Ask", label_visibility="collapsed", key="chat_in",
-            placeholder="e.g. What does ἱλαστήριον mean in Romans 3:25 and how does it bear on the atonement debate?")
-        sc, cc = st.columns([2, 1])
-        with sc:
-            if st.button("SEND", use_container_width=True, key="send_btn") and user_in.strip():
-                st.session_state.chat_history.append({"role": "user", "content": user_in.strip()})
-                reply = ai(st.session_state.chat_history, anthropic_key)
-                st.session_state.chat_history.append({"role": "assistant", "content": reply})
-                st.rerun()
-        with cc:
-            if st.button("CLEAR CONVERSATION", use_container_width=True, key="clear_chat"):
-                st.session_state.chat_history = []
-                st.rerun()
 
-        if st.session_state.chat_history:
-            tc = sum(len(m["content"]) for m in st.session_state.chat_history)
+    # ══════════════════════════════════════════════
+    # TAB 5 — THEOLOGICAL DEBATES
+    # ══════════════════════════════════════════════
+    with tab5:
+        sec_head("Theological Debates", "Live internal debates — no editorial advocacy")
+        st.markdown(
+            f'<div style="font-size:.76rem;color:{LT_GOLD};opacity:.68;line-height:1.75;margin-bottom:.7rem">'
+            f'Each debate presents the strongest arguments for each position from primary advocates. '
+            f'No editorial position is taken.</div>', unsafe_allow_html=True)
+
+        DEBATES = {
+            "Calvinism vs. Arminianism — Election & Perseverance": {
+                "calvinist": {
+                    "label": "Reformed / Calvinist Position",
+                    "advocates": "John Calvin, Francis Turretin, John Owen, B.B. Warfield, John Murray, Thomas Schreiner, J.I. Packer",
+                    "argument": "Romans 9:6–24 establishes individual unconditional election: God's choice of Jacob over Esau is made 'before they were born or had done anything good or bad' (v. 11), explicitly excluding foreseen merit. The phrase 'I will have mercy on whom I have mercy' (v. 15, citing Ex 33:19) grounds election in divine sovereignty, not human response. The 'golden chain' of Romans 8:29–30 (foreknew → predestined → called → justified → glorified) presents an unbroken, infallible sequence — no link can be broken. John 6:37–44 reinforces this: 'All that the Father gives me will come to me' (v. 37); 'No one can come to me unless the Father who sent me draws him' (v. 44). The verb 'draws' (ἕλκω, helkō) is the same used in John 21:11 of dragging a net — an effectual, irresistible drawing. 1 John 2:19 ('they went out from us because they were never of us') interprets apostasy not as loss of salvation but as evidence of non-election.",
+                },
+                "arminian": {
+                    "label": "Arminian / Open Grace Position",
+                    "advocates": "Jacob Arminius, John Wesley, Roger Olson, William Klein, F. Leroy Forlines",
+                    "argument": "Romans 9 is about corporate election (the election of a people, not individuals to salvation) — the context is the faithfulness of God's covenant promises to Israel (v. 6: 'the word of God has not failed'), not the predestination of individuals. Jacob and Esau represent nations, not individuals selected for salvation or damnation (cf. Mal 1:2–3 which refers to nations). 1 Peter 1:1–2 presents election as 'according to the foreknowledge of God the Father' — God elects those whom he foreknows will respond in faith. John 6:37–44 concerns the context of believing disciples who are kept, not a deterministic decree. The 'drawing' of the Father (v. 44) is available to all: Jesus says 'I will draw all men to myself' (12:32), using the same verb. Arminian perseverance (conditional security): the same passages that promise security (John 10:28–29) assume the sheep are hearing and following (v. 27); apostasy texts (Heb 6:4–6; 10:26–29) warn genuine believers of genuine danger.",
+                },
+                "key_texts": ["Romans 9:6–24", "John 6:37–44", "1 John 2:19", "1 Peter 1:1–2", "Hebrews 6:4–6"],
+            },
+            "Inerrancy — Warfield vs. Enns vs. Vanhoozer": {
+                "position_a": {
+                    "label": "Plenary Verbal Inerrancy (Warfield)",
+                    "advocates": "B.B. Warfield, Charles Hodge, Wayne Grudem, D.A. Carson, John Frame (Chicago Statement, 1978)",
+                    "argument": "2 Timothy 3:16 ('all Scripture is θεόπνευστος, God-breathed') and 2 Peter 1:21 ('men spoke from God as they were carried along by the Holy Spirit') establish a concursive theory of inspiration: the divine and human authorship are simultaneous and non-competitive. The divine authorship guarantees inerrancy; the human authorship preserves genuine literary variety. The Chicago Statement (1978) defines inerrancy: 'Scripture in the original manuscripts does not affirm anything that is contrary to fact.' This applies to all domains in which Scripture speaks — not only theology but historical and cosmological matters insofar as they are affirmed.",
+                },
+                "position_b": {
+                    "label": "Incarnational / Cultural Model (Enns)",
+                    "advocates": "Peter Enns (Inspiration and Incarnation, 2005), Kenton Sparks",
+                    "argument": "The Incarnation provides the controlling analogy: as Christ was fully divine and fully human (including genuine human limitations), so Scripture is fully divine and fully human (including genuine cultural limitations). This means the ANE cosmological assumptions embedded in Genesis 1–2 are genuine features of the text — not errors but evidence of God accommodating his self-revelation to the idiom of its cultural moment. Inerrancy defined as 'what Scripture intends to affirm is true' preserves theological inerrancy while allowing for cultural embeddedness. Enns's critics (Trueman, Helm) argue this model cannot explain how divine accommodation includes factual errors without impugning divine truthfulness.",
+                },
+                "position_c": {
+                    "label": "Theodramatic Canonics (Vanhoozer)",
+                    "advocates": "Kevin Vanhoozer (The Drama of Doctrine, 2005; Biblical Authority After Babel, 2016)",
+                    "argument": "Vanhoozer proposes a speech-act theory of inspiration: Scripture's inerrancy applies to its illocutionary acts (what the text is doing — asserting, commanding, promising) rather than its locutions (the bare propositional content). This allows for literary genres to function appropriately: a poetic hyperbole is not inerrant if read as a scientific claim; it is inerrant as hyperbole. The Reformation's sola scriptura is preserved without the naive textual positivism of fundamentalism. Critics (Schreiner, Frame) argue Vanhoozer's model is ultimately indeterminate — who decides which speech acts are assertions and which are performatives?",
+                },
+                "key_texts": ["2 Tim 3:16", "2 Pet 1:20–21", "Matt 5:18", "John 10:35"],
+            },
+            "Annihilationism vs. Eternal Conscious Torment": {
+                "ect": {
+                    "label": "Eternal Conscious Torment (ECT)",
+                    "advocates": "Augustine, Aquinas, Jonathan Edwards, J.I. Packer, Robert Peterson, Denny Burk",
+                    "argument": "Revelation 14:9–11: 'The smoke of their torment goes up forever and ever (εἰς αἰῶνας αἰώνων), and they have no rest day or night.' The phrase εἰς αἰῶνας αἰώνων is the strongest temporal expression available in Greek and is used of God's eternal existence (Rev 4:9–10) — applying it to torment and then denying its duration is inconsistent. Matthew 25:46 uses the same adjective (αἰώνιος) for both punishment and life — 'eternal punishment' and 'eternal life.' If αἰώνιος means 'of limited duration' for punishment, it must mean the same for life — a conclusion no evangelical accepts. 2 Thessalonians 1:9 ('eternal destruction') uses ὄλεθρος (olethros) — destruction, but in context modified by 'from the face of the Lord,' suggesting banishment rather than cessation of existence.",
+                },
+                "anni": {
+                    "label": "Conditionalism / Annihilationism",
+                    "advocates": "Edward Fudge (The Fire That Consumes), John Stott, N.T. Wright, Clark Pinnock",
+                    "argument": "αἰώνιος denotes quality ('of the age to come') not necessarily infinite duration — it is used of the 'eternal' fire of Sodom (Jude 7) which is manifestly no longer burning. The smoke ascending 'forever' (Rev 14:11) is OT prophetic imagery for complete and final destruction (cf. Isa 34:9–10 of Edom — never literally fulfilled as perpetual smoke). 2 Thess 1:9 'eternal destruction' (ὄλεθρος) best denotes complete destruction whose effects are permanent, not a continuing process. Fudge: the biblical metaphor for hell is fire, which consumes; the fire of hell achieves its purpose — it doesn't burn forever, it destroys completely and permanently. 'Eternal' modifies the result, not the process. The soul's immortality is not a biblical datum; it is a Greek philosophical assumption imported into Christian anthropology.",
+                },
+                "key_texts": ["Rev 14:9–11", "Matt 25:46", "2 Thess 1:9", "Jude 7", "Isa 34:9–10"],
+            },
+            "Open Theism vs. Classical Divine Foreknowledge": {
+                "classical": {
+                    "label": "Classical Theism — Exhaustive Divine Foreknowledge",
+                    "advocates": "Augustine, Calvin, Aquinas, Helm, Frame, Ware",
+                    "argument": "Isaiah 46:9–10: 'I am God and there is no other... declaring the end from the beginning.' God's foreknowledge of specific human choices (Isa 44:28 — Cyrus named 150 years before his birth; Ps 139:4 — God knows our words before we speak them) requires exhaustive knowledge of future contingents. The Molinist solution (Plantinga, Craig): God has 'middle knowledge' of all counterfactuals of creaturely freedom — he knows what every free creature would do in every possible circumstance. This reconciles libertarian human freedom with exhaustive divine foreknowledge without making God the author of sin. Divine timelessness (Aquinas, Helm): God exists in an 'eternal present' — he does not 'foreknow' but simply knows all events in his atemporal perspective.",
+                },
+                "open": {
+                    "label": "Open Theism",
+                    "advocates": "Gregory Boyd (God of the Possible), Clark Pinnock (The Openness of God), John Sanders",
+                    "argument": "The biblical narrative of divine repentance (Gen 6:6: 'the LORD was grieved that he had made man'; Ex 32:14: 'the LORD relented from the disaster'; Jonah 3:10) implies a genuine change in God's intentions — genuine regret is incoherent if God always knew things would unfold as they did. Divine inquiry (Gen 3:9: 'Where are you?'; Gen 18:21: 'I will go down and see whether they have done altogether according to the outcry') implies genuine uncertainty. The best interpretation of these texts is not anthropomorphism but literal: God genuinely does not know with certainty what free creatures will choose, and this is not a deficiency but a feature of the relational God who created genuinely free agents. Critics (Frame, Ware) argue Open Theism's God cannot guarantee prophetic fulfillments that require specific human choices.",
+                },
+                "key_texts": ["Gen 6:6", "Isa 46:9–10", "Isa 44:28", "Ex 32:14", "Ps 139:4"],
+            },
+        }
+
+        for debate_title, debate_data in DEBATES.items():
+            with st.expander(debate_title):
+                keys = [k for k in debate_data if k != "key_texts"]
+                if "key_texts" in debate_data:
+                    refs_html = " ".join(
+                        f'<span class="xref-badge">{r}</span>' for r in debate_data["key_texts"])
+                    st.markdown(
+                        f'<div style="margin-bottom:.65rem">'
+                        f'<strong style="font-size:.63rem;color:{LT_GOLD};opacity:.62;letter-spacing:.1em">KEY TEXTS: </strong>'
+                        f'{refs_html}</div>', unsafe_allow_html=True)
+                for key in keys:
+                    pos = debate_data[key]
+                    st.markdown(
+                        f'<div class="scholar-card">'
+                        f'<div style="font-family:Georgia,serif;font-size:.91rem;font-weight:600;color:{GOLD};margin-bottom:.12rem">{pos["label"]}</div>'
+                        f'<div style="font-size:.61rem;color:{LT_GOLD};opacity:.62;margin-bottom:.45rem;font-style:italic">Advocates: {pos["advocates"]}</div>'
+                        f'<div style="font-size:.82rem;color:{CREAM};line-height:1.88">{pos["argument"]}</div>'
+                        f'</div>', unsafe_allow_html=True)
+                    sk = f"sm_{debate_title}_{key}"
+                    rk = f"sm_r_{debate_title}_{key}"
+                    bc, nc = st.columns([2, 5])
+                    with bc:
+                        if st.button("⚡ STEELMAN THIS", key=sk,
+                                     use_container_width=True, disabled=not anthropic_key):
+                            st.session_state[rk] = ai_steelman(
+                                debate_title, pos["label"], pos["argument"],
+                                debate_data.get("key_texts", []), anthropic_key)
+                    with nc:
+                        if not anthropic_key:
+                            st.markdown(
+                                f'<div style="font-size:.64rem;color:{LT_GOLD};opacity:.38;padding-top:.38rem">'
+                                f'Add ANTHROPIC_API_KEY to enable.</div>', unsafe_allow_html=True)
+                    if st.session_state.get(rk):
+                        st.markdown(
+                            f'<div style="margin-bottom:.35rem;font-size:.58rem;color:{SCARLET};letter-spacing:.12em">'
+                            f'AI STEELMAN — {pos["label"].upper()}</div>', unsafe_allow_html=True)
+                        parchment(st.session_state[rk])
+                        if st.button("✕ Clear", key=f"cl_{sk}"):
+                            del st.session_state[rk]
+
+
+    # ══════════════════════════════════════════════
+    # TAB 6 — AI SCHOLAR  (persistent chat)
+    # ══════════════════════════════════════════════
+    with tab6:
+        sec_head("AI Scholar", "Graduate-level biblical research — persistent conversation")
+        if not anthropic_key:
+            card(
+                f'<div style="font-size:.83rem;color:{CREAM};line-height:1.78">'
+                f'<strong style="color:{GOLD}">API key not configured.</strong><br>'
+                f'Add <code>ANTHROPIC_API_KEY = "sk-ant-..."</code> to Streamlit secrets '
+                f'(Dashboard → Settings → Secrets).</div>', SCARLET)
+        else:
             st.markdown(
-                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.28;margin-top:.38rem">'
-                f'~{tc//4:,} tokens in conversation · {len(st.session_state.chat_history)} messages</div>',
-                unsafe_allow_html=True)
+                f'<div style="font-size:.76rem;color:{LT_GOLD};opacity:.68;line-height:1.75;margin-bottom:.65rem">'
+                f'Persistent conversation with the AI Scholar. Context maintained across turns. '
+                f'All responses render in parchment view.</div>', unsafe_allow_html=True)
+
+            if "chat_history" not in st.session_state:
+                st.session_state.chat_history = []
+
+            sec_head("Quick Prompts")
+            QP = [
+                "What is the exegetical case for penal substitutionary atonement from Romans 3:21–26?",
+                "Explain Plantinga's modal ontological argument and the strongest objection to it.",
+                "What does μορφῇ θεοῦ in Philippians 2:6 mean and why does it matter for Christology?",
+                "Summarise the Calvinism/Arminianism debate on Romans 9 — strongest exegetical arguments on each side.",
+                "What is the historical case for the resurrection using only the minimal facts method?",
+                "How do the Dead Sea Scrolls bear on the reliability of the Old Testament text?",
+                "What is the difference between propitiation and expiation in Romans 3:25?",
+                "Explain the fine-tuning argument and the multiverse objection to it.",
+            ]
+            qc1, qc2 = st.columns(2)
+            for i, qp in enumerate(QP):
+                with (qc1 if i % 2 == 0 else qc2):
+                    if st.button(qp[:66] + ("…" if len(qp) > 66 else ""),
+                                 key=f"qp_{i}", use_container_width=True):
+                        st.session_state.chat_history.append({"role": "user", "content": qp})
+                        reply = ai(st.session_state.chat_history, anthropic_key)
+                        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                        st.rerun()
+
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("Conversation")
+            for msg in st.session_state.chat_history:
+                if msg["role"] == "user":
+                    st.markdown(
+                        f'<div style="background:{BIB_BLUE};border-radius:4px;padding:.62rem .88rem;'
+                        f'margin-bottom:.38rem;font-size:.82rem;color:{CREAM};line-height:1.72">'
+                        f'<span style="font-size:.56rem;color:{LT_GOLD};opacity:.62;letter-spacing:.1em">YOU</span><br>'
+                        f'{msg["content"]}</div>', unsafe_allow_html=True)
+                else:
+                    parchment(msg["content"])
+
+            user_in = st.text_input(
+                "Ask", label_visibility="collapsed", key="chat_in",
+                placeholder="e.g. What does ἱλαστήριον mean in Romans 3:25 and how does it bear on the atonement debate?")
+            sc, cc = st.columns([2, 1])
+            with sc:
+                if st.button("SEND", use_container_width=True, key="send_btn") and user_in.strip():
+                    st.session_state.chat_history.append({"role": "user", "content": user_in.strip()})
+                    reply = ai(st.session_state.chat_history, anthropic_key)
+                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                    st.rerun()
+            with cc:
+                if st.button("CLEAR CONVERSATION", use_container_width=True, key="clear_chat"):
+                    st.session_state.chat_history = []
+                    st.rerun()
+
+            if st.session_state.chat_history:
+                tc = sum(len(m["content"]) for m in st.session_state.chat_history)
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.28;margin-top:.38rem">'
+                    f'~{tc//4:,} tokens in conversation · {len(st.session_state.chat_history)} messages</div>',
+                    unsafe_allow_html=True)
