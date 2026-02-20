@@ -83,38 +83,23 @@ st.markdown(f"""
 [data-testid="stSidebar"] .stMarkdown div,
 [data-testid="stSidebar"] span{{color:{GOLD}!important}}
 
-/* Nav rail radio — transform into icon buttons */
+/* Nav rail radio — styled navigation options */
 [data-testid="stSidebar"] .stRadio>div{{gap:0!important;flex-direction:column!important}}
+/* Hide native radio input circle entirely */
+[data-testid="stSidebar"] .stRadio input[type="radio"]{{display:none!important}}
 [data-testid="stSidebar"] .stRadio label{{
     display:flex!important;
     align-items:center!important;
-    gap:.65rem!important;
+    gap:.6rem!important;
     padding:.72rem 1.1rem!important;
     margin:.1rem 0!important;
     border-radius:6px!important;
     border:1px solid transparent!important;
     cursor:pointer!important;
     transition:all .18s ease!important;
-    font-family:'IBM Plex Mono',monospace!important;
-    font-size:.72rem!important;
-    letter-spacing:.08em!important;
-    color:rgba(245,225,122,.5)!important;
-    background:transparent!important;
+    position:relative!important;
 }}
-[data-testid="stSidebar"] .stRadio label:hover{{
-    background:rgba(212,175,55,.06)!important;
-    border-color:rgba(212,175,55,.18)!important;
-    color:{GOLD}!important;
-}}
-[data-testid="stSidebar"] .stRadio label[data-checked="true"],
-[data-testid="stSidebar"] .stRadio [aria-checked="true"] + label,
-[data-testid="stSidebar"] .stRadio input:checked + div label{{
-    background:rgba(212,175,55,.1)!important;
-    border-color:rgba(212,175,55,.35)!important;
-    color:{GOLD}!important;
-    font-weight:600!important;
-}}
-/* Boost specificity so nav label text is visible against global div/p/span cream rule */
+/* Dim inactive label text */
 [data-testid="stSidebar"] .stRadio label p,
 [data-testid="stSidebar"] .stRadio label span,
 [data-testid="stSidebar"] .stRadio label div{{
@@ -122,10 +107,27 @@ st.markdown(f"""
     font-family:'IBM Plex Mono',monospace!important;
     font-size:.72rem!important;
     letter-spacing:.08em!important;
+    transition:color .18s!important;
+}}
+[data-testid="stSidebar"] .stRadio label:hover{{
+    background:rgba(212,175,55,.07)!important;
+    border-color:rgba(212,175,55,.2)!important;
 }}
 [data-testid="stSidebar"] .stRadio label:hover p,
 [data-testid="stSidebar"] .stRadio label:hover span,
 [data-testid="stSidebar"] .stRadio label:hover div{{color:{GOLD}!important}}
+/* Active state — Streamlit sets aria-checked on the input's parent */
+[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"]:has(+ input:checked) ~ label,
+[data-testid="stSidebar"] .stRadio label:has(input:checked){{
+    background:rgba(212,175,55,.11)!important;
+    border-color:rgba(212,175,55,.35)!important;
+}}
+[data-testid="stSidebar"] .stRadio label:has(input:checked) p,
+[data-testid="stSidebar"] .stRadio label:has(input:checked) span,
+[data-testid="stSidebar"] .stRadio label:has(input:checked) div{{
+    color:{GOLD}!important;
+    font-weight:600!important;
+}}
 
 /* Sidebar quick-load buttons */
 [data-testid="stSidebar"] .stButton>button{{
@@ -572,6 +574,15 @@ def get_esv_key():
 
 def get_api_bible_key():
     try: return st.secrets["BIBLE_API_KEY"]
+    except: return ""
+
+def get_biblia_key():
+    try: return st.secrets["BIBLIA_API_KEY"]
+    except: return ""
+
+def get_crossref_email():
+    """Crossref Polite Pool — email identifies requester for higher rate limits."""
+    try: return st.secrets["CROSSREF_EMAIL"]
     except: return ""
 
 
@@ -1442,6 +1453,128 @@ def fetch_apibible(reference: str, bible_id: str, api_key: str) -> dict:
 
 
 # ─────────────────────────────────────────────
+# BIBLIA LEXICON  (Strong's — live definitions)
+# ─────────────────────────────────────────────
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_lexicon_data(strongs_number: str, biblia_key: str) -> dict:
+    """
+    Fetch a full Strong's lexicon entry from Biblia API.
+
+    Args:
+        strongs_number: e.g. 'G3056' (Greek) or 'H3068' (Hebrew).
+                        Must include G/H prefix followed by digits.
+        biblia_key: BIBLIA_API_KEY from st.secrets.
+
+    Returns:
+        dict with keys: number, lemma, transliteration, pronunciation,
+                        part_of_speech, definition, kjv_usage, language, error.
+    """
+    if not biblia_key:
+        return {"error": "BIBLIA_API_KEY not configured in Streamlit secrets."}
+
+    snum = strongs_number.strip().upper()
+    lang = "Hebrew" if snum.startswith("H") else "Greek"
+    url  = "https://api.biblia.com/v1/bible/content/LexiconEntry.json"
+    params = {
+        "key":     biblia_key,
+        "strongs": snum,
+        "style":   "fulldefinition",
+    }
+    try:
+        r = requests.get(url, params=params, timeout=12)
+        if r.status_code == 200:
+            data    = r.json()
+            entries = data if isinstance(data, list) else [data]
+            if not entries:
+                return {"error": f"No entry found for {snum}."}
+            e = entries[0]
+            return {
+                "number":          snum,
+                "language":        lang,
+                "lemma":           e.get("lemma", ""),
+                "transliteration": e.get("translit", ""),
+                "pronunciation":   e.get("pronun",  ""),
+                "part_of_speech":  e.get("pos",     ""),
+                "definition":      e.get("definition", e.get("shortDef", "Definition unavailable.")),
+                "kjv_usage":       e.get("kjvUsage", ""),
+                "error":           None,
+            }
+        if r.status_code == 401:
+            return {"error": "Biblia API key invalid — verify BIBLIA_API_KEY in secrets."}
+        return {"error": f"Biblia API error {r.status_code}: {r.text[:200]}"}
+    except Exception as ex:
+        return {"error": f"Request failed: {ex}"}
+
+
+# ─────────────────────────────────────────────
+# CROSSREF SCHOLARLY ARTICLES  (Polite Pool)
+# ─────────────────────────────────────────────
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_scholarly_articles(passage_citation: str, crossref_email: str,
+                            rows: int = 8) -> list:
+    """
+    Query Crossref for peer-reviewed journal articles related to a passage.
+
+    Uses the Polite Pool: supplying a mailto: User-Agent grants access to a
+    dedicated higher-rate-limit pool per Crossref documentation.
+
+    Args:
+        passage_citation: e.g. 'Romans 3:25' or 'Philippians 2:6'.
+        crossref_email:   CROSSREF_EMAIL from st.secrets.
+        rows:             Results to return (8 default, 20 max recommended).
+
+    Returns:
+        List of dicts with: title, authors, journal, year, doi, url, score.
+        Returns [{"error": "..."}] on failure.
+    """
+    query   = f"{passage_citation} biblical exegesis theology"
+    mailto  = f"mailto:{crossref_email}" if crossref_email else "mailto:researcher@example.com"
+    headers = {"User-Agent": f"SententiaBibleLab/1.0 ({mailto})"}
+    params  = {
+        "query":  query,
+        "rows":   rows,
+        "filter": "type:journal-article",
+        "select": "DOI,title,author,container-title,published-print,published-online,URL,score",
+        "sort":   "relevance",
+        "order":  "desc",
+    }
+    try:
+        r = requests.get(
+            "https://api.crossref.org/works",
+            params=params, headers=headers, timeout=15,
+        )
+        if r.status_code == 200:
+            items   = r.json().get("message", {}).get("items", [])
+            results = []
+            for item in items:
+                pub  = item.get("published-print") or item.get("published-online") or {}
+                year = pub.get("date-parts", [[None]])[0][0]
+                raw  = item.get("author", [])
+                auths = [f"{a.get('family','')}, {a.get('given','')[:1]}."
+                         for a in raw[:3] if a.get("family")]
+                if len(raw) > 3:
+                    auths.append("et al.")
+                doi = item.get("DOI", "")
+                results.append({
+                    "title":   (item.get("title") or ["Untitled"])[0],
+                    "authors": "; ".join(auths) or "Unknown",
+                    "journal": (item.get("container-title") or ["Unknown Journal"])[0],
+                    "year":    str(year) if year else "n.d.",
+                    "doi":     doi,
+                    "url":     item.get("URL") or (f"https://doi.org/{doi}" if doi else ""),
+                    "score":   round(item.get("score", 0), 2),
+                })
+            return results or [{"error": "No journal articles found for this query."}]
+        if r.status_code == 429:
+            return [{"error": "Rate limited. Add CROSSREF_EMAIL to secrets for Polite Pool access."}]
+        return [{"error": f"Crossref API error {r.status_code}."}]
+    except Exception as ex:
+        return [{"error": f"Request failed: {ex}"}]
+
+
+# ─────────────────────────────────────────────
 # AI — SYSTEM PROMPT  (Craig aesthetic)
 # ─────────────────────────────────────────────
 
@@ -1668,9 +1801,11 @@ def build_mss_chart() -> "go.Figure":
 # ─────────────────────────────────────────────
 # RESOLVE KEYS  (outside sidebar — available to all tabs)
 # ─────────────────────────────────────────────
-anthropic_key = get_anthropic_key()
-esv_key       = get_esv_key()
-api_key       = get_api_bible_key()
+anthropic_key   = get_anthropic_key()
+esv_key         = get_esv_key()
+api_key         = get_api_bible_key()
+biblia_key      = get_biblia_key()
+crossref_email  = get_crossref_email()
 
 
 # ─────────────────────────────────────────────
@@ -1728,9 +1863,11 @@ with st.sidebar:
         f'Active Services</div>', unsafe_allow_html=True)
 
     for label, active, icon in [
-        ("AI Scholar",  bool(anthropic_key), "🤖"),
-        ("ESV API",     bool(esv_key),       "📖"),
-        ("API.Bible",   bool(api_key),       "🌐"),
+        ("AI Scholar",  bool(anthropic_key),  "🤖"),
+        ("ESV API",     bool(esv_key),        "📖"),
+        ("API.Bible",   bool(api_key),        "🌐"),
+        ("Biblia Lex",  bool(biblia_key),     "📚"),
+        ("Crossref",    bool(crossref_email), "🔬"),
     ]:
         dot_color = "#4caf50" if active else "#555"
         txt_color = GOLD if active else "rgba(245,225,122,.28)"
@@ -2037,13 +2174,14 @@ else:
     # ══════════════════════════════════════════════════
     # SIX SCHOLARLY TABS
     # ══════════════════════════════════════════════════
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📖  Scripture Lab",
         "🏛  Commentary Engine",
         "⚔  Apologetics",
         "📋  Research Prompts",
         "⚖  Theological Debates",
         "🤖  AI Scholar",
+        "🔬  Research Panel",
     ])
 
 
@@ -2611,3 +2749,220 @@ else:
                     f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.28;margin-top:.38rem">'
                     f'~{tc//4:,} tokens in conversation · {len(st.session_state.chat_history)} messages</div>',
                     unsafe_allow_html=True)
+
+
+    # ══════════════════════════════════════════════
+    # TAB 7 — RESEARCH PANEL
+    # Biblia Live Lexicon + Crossref Scholarly Articles
+    # ══════════════════════════════════════════════
+    with tab7:
+
+        sec_head("Research Panel", "Live Lexicon · Peer-Reviewed Scholarship")
+        st.markdown(
+            f'<div style="font-size:.72rem;color:{LT_GOLD};opacity:.58;line-height:1.7;margin-bottom:.8rem">'
+            f'Look up any Strong\'s number for a full BDAG/HALOT-quality definition via Biblia, '
+            f'and retrieve peer-reviewed journal articles from Crossref\'s scholarly index '
+            f'for any biblical passage or topic.</div>',
+            unsafe_allow_html=True)
+
+        lex_col, art_col = st.columns([1, 1.6], gap="large")
+
+        # ── LEFT: Biblia Live Lexicon ──────────────────────────────────────────
+        with lex_col:
+            sec_head("Live Lexicon", "Biblia API — Strong's Greek & Hebrew")
+
+            if not biblia_key:
+                st.markdown(
+                    f'<div style="background:rgba(178,34,34,.08);border:1px solid rgba(178,34,34,.3);'
+                    f'border-radius:5px;padding:.75rem 1rem;font-size:.75rem;color:{SCARLET}">'
+                    f'⚠ Add <code>BIBLIA_API_KEY</code> to Streamlit secrets to enable live lexicon lookups.</div>',
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.55;letter-spacing:.1em;'
+                    f'margin-bottom:.35rem">STRONG\'S NUMBER — prefix G (Greek) or H (Hebrew)</div>',
+                    unsafe_allow_html=True)
+
+                lc1, lc2 = st.columns([3, 1])
+                with lc1:
+                    snum_input = st.text_input(
+                        "Strong's Number", placeholder="e.g. G3056  or  H3068",
+                        label_visibility="collapsed", key="lex_input")
+                with lc2:
+                    lex_btn = st.button("LOOK UP", use_container_width=True, key="lex_btn")
+
+                # Quick-access buttons for common apologetics terms
+                st.markdown(
+                    f'<div style="font-size:.55rem;color:{LT_GOLD};opacity:.45;'
+                    f'letter-spacing:.14em;margin:.5rem 0 .25rem">QUICK ACCESS</div>',
+                    unsafe_allow_html=True)
+                quick_nums = {
+                    "G3056": "λόγος",  "G2316": "θεός",  "G26":   "ἀγάπη",
+                    "G2424": "Ἰησοῦς","G4561": "σάρξ",  "G4151": "πνεῦμα",
+                    "H3068": "יהוה",   "H430":  "אֱלֹהִים","H2617": "חֶסֶד",
+                }
+                qcols = st.columns(3)
+                for i, (qnum, qlem) in enumerate(quick_nums.items()):
+                    if qcols[i % 3].button(
+                            f"{qnum} {qlem}", key=f"qlex_{qnum}",
+                            use_container_width=True):
+                        st.session_state.lex_lookup = qnum
+
+                # Resolve which number to look up
+                lookup_num = st.session_state.get("lex_lookup", "")
+                if lex_btn and snum_input.strip():
+                    lookup_num = snum_input.strip()
+                    st.session_state.lex_lookup = lookup_num
+
+                # Fetch and display
+                if lookup_num:
+                    with st.spinner(f"Fetching {lookup_num}…"):
+                        entry = get_lexicon_data(lookup_num, biblia_key)
+
+                    if entry.get("error"):
+                        st.markdown(
+                            f'<div style="background:rgba(178,34,34,.08);border:1px solid rgba(178,34,34,.25);'
+                            f'border-radius:5px;padding:.7rem 1rem;font-size:.74rem;color:{SCARLET};margin-top:.5rem">'
+                            f'⚠ {entry["error"]}</div>', unsafe_allow_html=True)
+                    else:
+                        lang_color = GOLD if entry["language"] == "Greek" else SCARLET
+                        st.markdown(
+                            f'<div style="background:linear-gradient(135deg,rgba(4,9,26,.85),rgba(7,16,31,.95));'
+                            f'border:1px solid rgba(212,175,55,.2);border-left:4px solid {lang_color};'
+                            f'border-radius:0 6px 6px 0;padding:1rem 1.2rem;margin-top:.55rem">'
+                            f'<div style="display:flex;align-items:baseline;gap:.7rem;margin-bottom:.5rem">'
+                            f'<div style="font-size:1.6rem;color:{GOLD};font-family:Georgia,serif">'
+                            f'{entry["lemma"] or entry["number"]}</div>'
+                            f'<div style="font-size:.58rem;color:{lang_color};background:rgba(212,175,55,.08);'
+                            f'border:1px solid rgba(212,175,55,.2);border-radius:3px;'
+                            f'padding:2px 7px;letter-spacing:.08em">{entry["number"]} · {entry["language"]}</div>'
+                            f'</div>'
+                            f'<div style="font-size:.75rem;color:{LT_GOLD};opacity:.7;margin-bottom:.15rem;font-style:italic">'
+                            f'{entry["transliteration"]}'
+                            f'{"  ·  " + entry["pronunciation"] if entry["pronunciation"] else ""}'
+                            f'</div>'
+                            + (
+                                f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.5;'
+                                f'letter-spacing:.12em;margin-bottom:.5rem;text-transform:uppercase">'
+                                f'{entry["part_of_speech"]}</div>'
+                                if entry["part_of_speech"] else ""
+                            )
+                            + f'</div>', unsafe_allow_html=True)
+
+                        # Full definition in expander
+                        with st.expander("📖  Full Definition", expanded=True):
+                            st.markdown(
+                                f'<div style="font-family:Crimson Text,Georgia,serif;'
+                                f'font-size:1rem;color:{INK};background:{PARCHMENT};'
+                                f'padding:1rem 1.2rem;border-radius:5px;line-height:1.9;">'
+                                f'{entry["definition"]}</div>',
+                                unsafe_allow_html=True)
+
+                        if entry.get("kjv_usage"):
+                            with st.expander("📜  KJV Usage"):
+                                st.markdown(
+                                    f'<div style="font-size:.8rem;color:{CREAM};'
+                                    f'font-family:IBM Plex Mono,monospace;line-height:1.8;'
+                                    f'opacity:.8">{entry["kjv_usage"]}</div>',
+                                    unsafe_allow_html=True)
+
+        # ── RIGHT: Crossref Scholarly Articles ────────────────────────────────
+        with art_col:
+            sec_head("Scholarly Literature", "Crossref Polite Pool — Peer-Reviewed Journals")
+
+            if not crossref_email:
+                st.markdown(
+                    f'<div style="background:rgba(178,34,34,.08);border:1px solid rgba(178,34,34,.3);'
+                    f'border-radius:5px;padding:.75rem 1rem;font-size:.75rem;color:{SCARLET}">'
+                    f'⚠ Add <code>CROSSREF_EMAIL</code> to Streamlit secrets to enable Polite Pool access '
+                    f'and higher rate limits.</div>',
+                    unsafe_allow_html=True)
+
+            # Pre-populate from active scripture ref if available
+            default_query = st.session_state.get("scripture_ref", "")
+            st.markdown(
+                f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.55;letter-spacing:.1em;'
+                f'margin-bottom:.35rem">PASSAGE OR TOPIC QUERY</div>',
+                unsafe_allow_html=True)
+
+            ac1, ac2 = st.columns([4, 1])
+            with ac1:
+                art_query = st.text_input(
+                    "Article Query", value=default_query,
+                    placeholder="e.g. Romans 3:25  or  penal substitution  or  kenosis Philippians 2",
+                    label_visibility="collapsed", key="art_query")
+            with ac2:
+                art_btn = st.button("SEARCH", use_container_width=True, key="art_btn")
+
+            # Row count slider
+            art_rows = st.select_slider(
+                "Results", options=[4, 6, 8, 10, 15, 20], value=8,
+                label_visibility="collapsed", key="art_rows")
+            st.markdown(
+                f'<div style="font-size:.56rem;color:{LT_GOLD};opacity:.4;margin-top:-.3rem;'
+                f'margin-bottom:.5rem">{art_rows} results · sorted by Crossref relevance score</div>',
+                unsafe_allow_html=True)
+
+            if art_btn and art_query.strip():
+                st.session_state.art_results = get_scholarly_articles(
+                    art_query.strip(), crossref_email, art_rows)
+                st.session_state.art_query_label = art_query.strip()
+
+            articles = st.session_state.get("art_results", [])
+
+            if articles:
+                if articles[0].get("error"):
+                    st.markdown(
+                        f'<div style="background:rgba(178,34,34,.08);border:1px solid rgba(178,34,34,.25);'
+                        f'border-radius:5px;padding:.7rem 1rem;font-size:.74rem;color:{SCARLET};margin-top:.4rem">'
+                        f'⚠ {articles[0]["error"]}</div>', unsafe_allow_html=True)
+                else:
+                    q_label = st.session_state.get("art_query_label", art_query)
+                    st.markdown(
+                        f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.5;'
+                        f'letter-spacing:.1em;margin-bottom:.6rem">'
+                        f'{len(articles)} RESULTS · QUERY: {q_label.upper()}</div>',
+                        unsafe_allow_html=True)
+
+                    for i, art in enumerate(articles, 1):
+                        doi_url = art.get("url") or f"https://doi.org/{art['doi']}"
+
+                        # Relevance bar (score normalised to ~0–100 range)
+                        score_pct = min(int(art["score"] * 10), 100) if art.get("score") else 0
+
+                        st.markdown(
+                            f'<div style="background:linear-gradient(135deg,rgba(4,9,26,.75),rgba(7,16,31,.9));'
+                            f'border:1px solid rgba(212,175,55,.14);border-left:3px solid rgba(212,175,55,.4);'
+                            f'border-radius:0 5px 5px 0;padding:.8rem 1rem;margin-bottom:.55rem;'
+                            f'transition:border-left-color .15s">'
+
+                            # Title
+                            f'<div style="font-family:Playfair Display,Georgia,serif;'
+                            f'font-size:.88rem;color:{GOLD};line-height:1.35;margin-bottom:.3rem">'
+                            f'{i}. {art["title"]}</div>'
+
+                            # Authors
+                            f'<div style="font-size:.64rem;color:{LT_GOLD};opacity:.65;'
+                            f'margin-bottom:.18rem;font-style:italic">{art["authors"]}</div>'
+
+                            # Journal + Year badge
+                            f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">'
+                            f'<span style="font-size:.65rem;color:{CREAM};opacity:.75">{art["journal"]}</span>'
+                            f'<span style="font-size:.58rem;color:{NAVY};background:{LT_GOLD};'
+                            f'padding:1px 6px;border-radius:2px;font-weight:600">{art["year"]}</span>'
+                            f'</div>'
+
+                            # DOI link + relevance score
+                            f'<div style="display:flex;align-items:center;justify-content:space-between">'
+                            + (f'<a href="{doi_url}" target="_blank" style="font-size:.63rem;'
+                               f'color:rgba(212,175,55,.7);text-decoration:none;'
+                               f'font-family:IBM Plex Mono,monospace;letter-spacing:.04em;'
+                               f'border-bottom:1px solid rgba(212,175,55,.25)">'
+                               f'DOI: {art["doi"] or "View Article"} ↗</a>'
+                               if art.get("doi") or art.get("url") else
+                               f'<span style="font-size:.63rem;color:{LT_GOLD};opacity:.3">No DOI available</span>')
+                            + f'<span style="font-size:.58rem;color:{LT_GOLD};opacity:.35">'
+                              f'score {art["score"]}</span>'
+                              f'</div>'
+
+                            f'</div>', unsafe_allow_html=True)
