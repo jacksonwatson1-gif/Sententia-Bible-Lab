@@ -16,6 +16,7 @@ import json
 import math
 import hashlib
 import datetime
+import io
 from supabase import create_client, Client
 
 # ─────────────────────────────────────────────
@@ -585,6 +586,10 @@ def get_biblia_key():
 def get_crossref_email():
     """Crossref Polite Pool — email identifies requester for higher rate limits."""
     try: return st.secrets["CROSSREF_EMAIL"]
+    except: return ""
+
+def get_openai_key():
+    try: return st.secrets["OPENAI_API_KEY"]
     except: return ""
 
 def get_supabase_client():
@@ -1646,6 +1651,271 @@ def delete_library_row(db, table: str, row_id: int) -> bool:
 
 
 # ─────────────────────────────────────────────
+# OPENAI — SECOND SCHOLAR VOICE
+# ─────────────────────────────────────────────
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _openai_call_cached(messages_json: str, openai_key: str,
+                         max_tokens: int = 2000) -> str:
+    """
+    Cached OpenAI chat completion via REST.
+    Uses gpt-4o-mini — cost-effective, strong theological reasoning.
+    All args are strings for st.cache_data hashability.
+    """
+    if not openai_key:
+        return "⚠ OPENAI_API_KEY not configured in Streamlit secrets."
+    try:
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {openai_key}",
+                "Content-Type":  "application/json",
+            },
+            json={
+                "model":      "gpt-4o-mini",
+                "max_tokens": max_tokens,
+                "messages":   json.loads(messages_json),
+            },
+            timeout=90,
+        )
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+        if r.status_code == 401:
+            return "⚠ OpenAI key invalid — verify OPENAI_API_KEY in secrets."
+        return f"⚠ OpenAI error {r.status_code}: {r.text[:300]}"
+    except Exception as ex:
+        return f"⚠ Request failed: {ex}"
+
+
+def openai_scholar(prompt: str, openai_key: str, max_tokens: int = 2000) -> str:
+    """Public wrapper for a single-turn OpenAI scholarly response."""
+    system = (
+        "You are a rigorous biblical scholar and theologian. "
+        "Respond with precision, citing named scholars and primary sources. "
+        "Use section headers: Historical Context, Linguistic Analysis, "
+        "Scholarly Dialogue, Thematic Synthesis. "
+        "Engage honestly with counterarguments. Do not pad."
+    )
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user",   "content": prompt},
+    ]
+    return _openai_call_cached(
+        json.dumps(messages, ensure_ascii=False), openai_key, max_tokens)
+
+
+def debate_prompt_claude(passage: str, topic: str, position: str) -> str:
+    return (
+        f"You are arguing the {position} position in the debate: '{topic}'\n"
+        f"Passage under consideration: {passage}\n\n"
+        "Build the strongest exegetical and theological case for your assigned "
+        "position. Anticipate and answer the two strongest objections. "
+        "Use mandatory headers: Exegetical Foundation, Theological Argument, "
+        "Objections Answered, Concluding Thesis. "
+        "This is a scholarly debate exercise — argue your assigned side rigorously."
+    )
+
+
+def debate_prompt_openai(passage: str, topic: str, position: str) -> str:
+    return (
+        f"You are a biblical scholar assigned to argue the {position} position "
+        f"in this theological debate: '{topic}'\n"
+        f"Primary passage: {passage}\n\n"
+        "Construct the most rigorous exegetical argument for your position. "
+        "Engage named scholars. Address the strongest counterarguments. "
+        "Use headers: Exegetical Foundation, Theological Argument, "
+        "Objections Answered, Concluding Thesis."
+    )
+
+
+# ─────────────────────────────────────────────
+# SESSION EXPORT — DOCX
+# Generates a formatted Word document of the
+# current research session using python-docx.
+# ─────────────────────────────────────────────
+
+def build_session_docx(session_data: dict) -> bytes:
+    """
+    Compile a research session into a formatted .docx file.
+
+    Args:
+        session_data: dict with keys:
+            passage_ref    — str
+            translation    — str
+            passage_text   — str
+            inquiry        — str
+            ai_response    — str
+            ai_analysis    — str (passage analysis, may be empty)
+            articles       — list of article dicts
+            lexicon_entries — list of {number, lemma, language, definition}
+            export_date    — str (ISO date)
+
+    Returns:
+        bytes — the .docx file contents, ready for st.download_button.
+    """
+    try:
+        from docx import Document as DocxDocument
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+    except ImportError:
+        return b""
+
+    doc = DocxDocument()
+
+    # ── Page margins (1 inch) ────────────────────────────────────────────────
+    for section in doc.sections:
+        section.top_margin    = Inches(1)
+        section.bottom_margin = Inches(1)
+        section.left_margin   = Inches(1.25)
+        section.right_margin  = Inches(1.25)
+
+    # ── Helper: add styled paragraph ────────────────────────────────────────
+    def add_heading(text, level=1):
+        p = doc.add_heading(text, level=level)
+        for run in p.runs:
+            run.font.color.rgb = RGBColor(0x4a, 0x37, 0x28)
+        return p
+
+    def add_body(text, italic=False, bold=False):
+        p = doc.add_paragraph()
+        run = p.add_run(text)
+        run.font.size = Pt(11)
+        run.font.italic = italic
+        run.font.bold   = bold
+        p.paragraph_format.space_after = Pt(6)
+        return p
+
+    def add_label(label, value):
+        p = doc.add_paragraph()
+        r1 = p.add_run(f"{label}: ")
+        r1.font.bold = True
+        r1.font.size = Pt(10)
+        r2 = p.add_run(value or "—")
+        r2.font.size = Pt(10)
+        p.paragraph_format.space_after = Pt(3)
+
+    def add_divider():
+        p = doc.add_paragraph()
+        pPr = p._p.get_or_add_pPr()
+        pBdr = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "4")
+        bottom.set(qn("w:space"), "1")
+        bottom.set(qn("w:color"), "D4AF37")
+        pBdr.append(bottom)
+        pPr.append(pBdr)
+        p.paragraph_format.space_after = Pt(8)
+
+    # ── Title block ──────────────────────────────────────────────────────────
+    title = doc.add_heading("Sententia Bible Lab — Research Session", 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in title.runs:
+        run.font.size = Pt(18)
+        run.font.color.rgb = RGBColor(0x4a, 0x37, 0x28)
+
+    sub = doc.add_paragraph(
+        f"Exported {session_data.get('export_date', '')}  ·  "
+        f"Passage: {session_data.get('passage_ref', '')}  ·  "
+        f"Translation: {session_data.get('translation', '')}"
+    )
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in sub.runs:
+        run.font.size  = Pt(10)
+        run.font.italic = True
+    doc.add_paragraph()
+
+    # ── Session metadata ─────────────────────────────────────────────────────
+    add_heading("Session Metadata", 1)
+    add_label("Passage Reference", session_data.get("passage_ref", ""))
+    add_label("Translation",       session_data.get("translation", ""))
+    add_label("Export Date",       session_data.get("export_date", ""))
+    add_divider()
+
+    # ── Passage text ─────────────────────────────────────────────────────────
+    if session_data.get("passage_text"):
+        add_heading("Scripture Text", 1)
+        add_body(session_data["passage_text"], italic=True)
+        add_divider()
+
+    # ── Primary inquiry + AI response ────────────────────────────────────────
+    if session_data.get("inquiry") or session_data.get("ai_response"):
+        add_heading("Primary Inquiry & AI Scholar Response", 1)
+        if session_data.get("inquiry"):
+            add_label("Inquiry", session_data["inquiry"])
+            doc.add_paragraph()
+        if session_data.get("ai_response"):
+            # Strip markdown headers to plain text for DOCX
+            raw = session_data["ai_response"]
+            for line in raw.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith("## "):
+                    add_heading(line[3:], 2)
+                elif line.startswith("### "):
+                    add_heading(line[4:], 3)
+                else:
+                    line = re.sub(r"\*\*(.+?)\*\*", r"\1", line)
+                    line = re.sub(r"\*(.+?)\*",   r"\1", line)
+                    add_body(line)
+        add_divider()
+
+    # ── AI Passage Analysis ───────────────────────────────────────────────────
+    if session_data.get("ai_analysis"):
+        add_heading("AI Passage Analysis", 1)
+        raw = session_data["ai_analysis"]
+        for line in raw.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("## "):
+                add_heading(line[3:], 2)
+            elif line.startswith("### "):
+                add_heading(line[4:], 3)
+            else:
+                line = re.sub(r"\*\*(.+?)\*\*", r"\1", line)
+                add_body(line)
+        add_divider()
+
+    # ── Saved Articles ────────────────────────────────────────────────────────
+    articles = session_data.get("articles", [])
+    if articles:
+        add_heading("Referenced Scholarship", 1)
+        for i, art in enumerate(articles, 1):
+            p = doc.add_paragraph(style="List Number")
+            r = p.add_run(art.get("title", "Untitled"))
+            r.font.bold = True
+            r.font.size = Pt(11)
+            add_label("  Authors", art.get("authors", ""))
+            add_label("  Journal", f'{art.get("journal","")} ({art.get("year","")})')
+            if art.get("doi"):
+                add_label("  DOI",
+                          f'https://doi.org/{art["doi"]}')
+            doc.add_paragraph()
+        add_divider()
+
+    # ── Lexicon entries ───────────────────────────────────────────────────────
+    lex_entries = session_data.get("lexicon_entries", [])
+    if lex_entries:
+        add_heading("Lexicon Notes", 1)
+        for entry in lex_entries:
+            add_heading(
+                f'{entry.get("number","")} — {entry.get("lemma","")} '
+                f'({entry.get("language","")})', 2)
+            if entry.get("definition"):
+                add_body(entry["definition"])
+            doc.add_paragraph()
+
+    # ── Serialize to bytes ────────────────────────────────────────────────────
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+# ─────────────────────────────────────────────
 # BIBLIA LEXICON  (Strong's — live definitions)
 # ─────────────────────────────────────────────
 
@@ -2000,6 +2270,7 @@ api_key         = get_api_bible_key()
 biblia_key      = get_biblia_key()
 crossref_email  = get_crossref_email()
 supabase_db     = get_supabase_client()
+openai_key      = get_openai_key()
 
 
 # ─────────────────────────────────────────────
@@ -2058,6 +2329,7 @@ with st.sidebar:
 
     for label, active, icon in [
         ("AI Scholar",  bool(anthropic_key),  "🤖"),
+        ("OpenAI",      bool(openai_key),     "🧠"),
         ("ESV API",     bool(esv_key),        "📖"),
         ("API.Bible",   bool(api_key),        "🌐"),
         ("Biblia Lex",  bool(biblia_key),     "📚"),
@@ -2384,7 +2656,7 @@ else:
     # ══════════════════════════════════════════════════
     # SIX SCHOLARLY TABS
     # ══════════════════════════════════════════════════
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "📖  Scripture Lab",
         "🏛  Commentary Engine",
         "⚔  Apologetics",
@@ -2393,6 +2665,7 @@ else:
         "🤖  AI Scholar",
         "🔬  Research Panel",
         "📚  Library",
+        "⚔️  Scholar Debate",
     ])
 
 
@@ -2549,6 +2822,52 @@ else:
                     f'<div style="font-size:1.18rem;color:{CREAM};margin:.08rem 0">{entry["gk"]}</div>'
                     f'<div style="font-size:.73rem;color:{LT_GOLD};line-height:1.6">{entry["def"]}</div>'
                     f'</div>', unsafe_allow_html=True)
+
+        # ── Session Export ───────────────────────────────────────────────────────
+        if sdata.get("verses"):
+            st.markdown("<hr/>", unsafe_allow_html=True)
+            sec_head("Export Session", "Download this research session as a Word document")
+            ex1, ex2 = st.columns([3, 7])
+            with ex1:
+                if st.button("📄  Generate DOCX", key="export_btn",
+                             use_container_width=True):
+                    vtxt_export = " ".join(
+                        v.get("text","") for v in sdata.get("verses",[]))
+                    tlbl_export = {"kjv":"KJV","web":"WEB","bbe":"BBE"}.get(
+                        translation, "KJV")
+                    lib_export  = st.session_state.get("library_data", {})
+                    session_payload = {
+                        "passage_ref":    sref,
+                        "translation":    tlbl_export,
+                        "passage_text":   vtxt_export,
+                        "inquiry":        st.session_state.get("inq_text",""),
+                        "ai_response":    st.session_state.get("inq_response",""),
+                        "ai_analysis":    st.session_state.get("ai_analysis",""),
+                        "articles":       lib_export.get("shelf",[])[:10],
+                        "lexicon_entries": lib_export.get("notebook",[])[:10],
+                        "export_date":    datetime.datetime.now().strftime(
+                                          "%B %d, %Y"),
+                    }
+                    docx_bytes = build_session_docx(session_payload)
+                    if docx_bytes:
+                        st.session_state.export_bytes    = docx_bytes
+                        st.session_state.export_filename = (
+                            f"Sententia_{sref.replace(' ','_').replace(':','-')}"
+                            f"_{datetime.datetime.now().strftime('%Y%m%d')}.docx")
+                    else:
+                        st.error("Export failed — ensure python-docx is installed.")
+
+            if st.session_state.get("export_bytes"):
+                with ex2:
+                    st.download_button(
+                        label="⬇  Download DOCX",
+                        data=st.session_state.export_bytes,
+                        file_name=st.session_state.get(
+                            "export_filename","sententia_session.docx"),
+                        mime="application/vnd.openxmlformats-officedocument"
+                             ".wordprocessingml.document",
+                        key="dl_docx_btn",
+                    )
 
         # ── Technical Basement ───────────────────────────────────────────────────
         if sdata.get("verses"):
@@ -3569,3 +3888,250 @@ CREATE TABLE IF NOT EXISTS lexicon_notebook (
                                         st.success("Entry removed.")
                                         st.session_state.pop("library_data", None)
                                         st.rerun()
+
+
+    # ══════════════════════════════════════════════
+    # TAB 9 — SCHOLAR DEBATE
+    # Claude (Anthropic) vs. GPT-4o-mini (OpenAI)
+    # Two AI scholars argue opposing positions on
+    # any biblical or theological question.
+    # ══════════════════════════════════════════════
+    with tab9:
+
+        sec_head("Scholar Debate", "Claude vs. GPT-4o · Two AI Voices · Opposing Positions")
+        st.markdown(
+            f'<div style="font-size:.74rem;color:{LT_GOLD};opacity:.58;line-height:1.75;'
+            f'margin-bottom:.9rem">'
+            f'Each debate assigns one AI scholar to argue each side of a theological '
+            f'question with full exegetical rigour. Neither is expressing its personal '
+            f'view — both are performing charitable scholarly reconstruction. '
+            f'Engage both arguments critically.</div>',
+            unsafe_allow_html=True)
+
+        if not anthropic_key or not openai_key:
+            missing = []
+            if not anthropic_key: missing.append("ANTHROPIC_API_KEY")
+            if not openai_key:    missing.append("OPENAI_API_KEY")
+            st.markdown(
+                f'<div style="background:rgba(178,34,34,.08);border:1px solid rgba(178,34,34,.3);'
+                f'border-radius:6px;padding:.9rem 1.1rem;font-size:.78rem;color:{SCARLET}">'
+                f'⚠ Both AI services required. Missing: {", ".join(missing)}. '
+                f'Add to Streamlit secrets to enable debate mode.</div>',
+                unsafe_allow_html=True)
+        else:
+            ornament()
+
+            # ── Debate Configuration ──────────────────────────────────────────
+            sec_head("Debate Setup", "Configure passage, topic, and positions")
+
+            db_c1, db_c2 = st.columns([1, 1], gap="large")
+
+            with db_c1:
+                debate_passage = st.text_input(
+                    "Passage", key="debate_passage",
+                    value=st.session_state.get("scripture_ref", "Romans 3:21-26"),
+                    placeholder="e.g. Romans 3:25, John 1:1, Isaiah 53:5",
+                    label_visibility="collapsed")
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45;'
+                    f'margin-top:-.3rem;margin-bottom:.5rem">PRIMARY PASSAGE</div>',
+                    unsafe_allow_html=True)
+
+            with db_c2:
+                debate_topic = st.text_input(
+                    "Debate Topic", key="debate_topic",
+                    placeholder="e.g. Penal Substitutionary Atonement vs. Moral Influence Theory",
+                    label_visibility="collapsed")
+                st.markdown(
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45;'
+                    f'margin-top:-.3rem;margin-bottom:.5rem">DEBATE TOPIC / QUESTION</div>',
+                    unsafe_allow_html=True)
+
+            # Position assignment
+            pos_c1, pos_c2 = st.columns([1, 1], gap="large")
+            with pos_c1:
+                claude_position = st.text_input(
+                    "Claude position", key="claude_pos",
+                    placeholder="e.g. Penal Substitution",
+                    label_visibility="collapsed")
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:.4rem;'
+                    f'margin-top:-.3rem;margin-bottom:.5rem">'
+                    f'<div style="width:8px;height:8px;border-radius:50%;'
+                    f'background:{GOLD}"></div>'
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45">'
+                    f'CLAUDE\'S ASSIGNED POSITION</div></div>',
+                    unsafe_allow_html=True)
+            with pos_c2:
+                openai_position = st.text_input(
+                    "GPT position", key="openai_pos",
+                    placeholder="e.g. Moral Influence / Christus Victor",
+                    label_visibility="collapsed")
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:.4rem;'
+                    f'margin-top:-.3rem;margin-bottom:.5rem">'
+                    f'<div style="width:8px;height:8px;border-radius:50%;'
+                    f'background:{SCARLET}"></div>'
+                    f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45">'
+                    f'GPT-4o\'s ASSIGNED POSITION</div></div>',
+                    unsafe_allow_html=True)
+
+            # Preset debates
+            st.markdown(
+                f'<div style="font-size:.58rem;color:{LT_GOLD};opacity:.45;'
+                f'letter-spacing:.12em;margin:.6rem 0 .3rem">PRESET DEBATES</div>',
+                unsafe_allow_html=True)
+
+            PRESET_DEBATES = [
+                ("Penal Substitution vs. Moral Influence",
+                 "Romans 3:25", "Penal Substitution", "Moral Influence Theory"),
+                ("Calvinist vs. Arminian Soteriology",
+                 "Romans 9:6-24", "Calvinist (Unconditional Election)",
+                 "Arminian (Conditional Election)"),
+                ("Eternal Sonship vs. Incarnational Sonship",
+                 "John 1:1-14", "Eternal Generation of the Son",
+                 "Incarnational Sonship"),
+                ("Cessationism vs. Continuationism",
+                 "1 Corinthians 13:8-12", "Cessationism",
+                 "Continuationism"),
+                ("Inerrancy vs. Infallibility",
+                 "2 Timothy 3:16-17",
+                 "Verbal Plenary Inerrancy",
+                 "Functional Infallibility"),
+            ]
+
+            preset_cols = st.columns(3)
+            for i, (label, psg, cp, op) in enumerate(PRESET_DEBATES):
+                if preset_cols[i % 3].button(
+                        label, key=f"preset_debate_{i}",
+                        use_container_width=True):
+                    st.session_state.debate_passage  = psg
+                    st.session_state.debate_topic    = label
+                    st.session_state.claude_pos      = cp
+                    st.session_state.openai_pos      = op
+                    st.rerun()
+
+            ornament()
+
+            # ── Launch Debate ─────────────────────────────────────────────────
+            ready = (debate_passage.strip() and debate_topic.strip()
+                     and claude_position.strip() and openai_position.strip())
+
+            btn_c1, btn_c2 = st.columns([2, 8])
+            with btn_c1:
+                launch_btn = st.button(
+                    "⚔️  BEGIN DEBATE",
+                    key="launch_debate",
+                    use_container_width=True,
+                    disabled=not ready)
+            if not ready:
+                with btn_c2:
+                    st.markdown(
+                        f'<div style="font-size:.68rem;color:{LT_GOLD};opacity:.38;'
+                        f'padding-top:.45rem">Fill passage, topic, and both positions '
+                        f'to enable.</div>', unsafe_allow_html=True)
+
+            if launch_btn and ready:
+                debate_key = hashlib.md5(
+                    f"{debate_passage}{debate_topic}{claude_position}"
+                    f"{openai_position}".encode()).hexdigest()
+
+                with st.spinner("Claude is preparing arguments…"):
+                    claude_arg = ai_single(
+                        debate_prompt_claude(
+                            debate_passage, debate_topic, claude_position),
+                        anthropic_key, 2200)
+
+                with st.spinner("GPT-4o is preparing arguments…"):
+                    openai_arg = openai_scholar(
+                        debate_prompt_openai(
+                            debate_passage, debate_topic, openai_position),
+                        openai_key, 2200)
+
+                st.session_state.debate_result = {
+                    "passage":          debate_passage,
+                    "topic":            debate_topic,
+                    "claude_position":  claude_position,
+                    "openai_position":  openai_position,
+                    "claude_argument":  claude_arg,
+                    "openai_argument":  openai_arg,
+                }
+
+            # ── Render Debate ─────────────────────────────────────────────────
+            result = st.session_state.get("debate_result")
+            if result:
+                ornament()
+                sec_head(result["topic"], result["passage"])
+
+                arg_c1, arg_c2 = st.columns([1, 1], gap="large")
+
+                with arg_c1:
+                    # Claude panel header
+                    st.markdown(
+                        f'<div style="background:linear-gradient(135deg,'
+                        f'rgba(212,175,55,.08),rgba(4,9,26,.6));'
+                        f'border:1px solid rgba(212,175,55,.25);'
+                        f'border-top:3px solid {GOLD};'
+                        f'border-radius:0 0 6px 6px;'
+                        f'padding:.7rem 1rem;margin-bottom:.5rem;'
+                        f'display:flex;align-items:center;gap:.6rem">'
+                        f'<div style="font-size:1.1rem">🤖</div>'
+                        f'<div>'
+                        f'<div style="font-family:Playfair Display,Georgia,serif;'
+                        f'font-size:.88rem;color:{GOLD};font-weight:600">'
+                        f'Claude (Anthropic)</div>'
+                        f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.6;'
+                        f'letter-spacing:.08em">'
+                        f'{result["claude_position"].upper()}</div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True)
+                    parchment(result["claude_argument"])
+
+                with arg_c2:
+                    # GPT-4o panel header
+                    st.markdown(
+                        f'<div style="background:linear-gradient(135deg,'
+                        f'rgba(178,34,34,.08),rgba(4,9,26,.6));'
+                        f'border:1px solid rgba(178,34,34,.25);'
+                        f'border-top:3px solid {SCARLET};'
+                        f'border-radius:0 0 6px 6px;'
+                        f'padding:.7rem 1rem;margin-bottom:.5rem;'
+                        f'display:flex;align-items:center;gap:.6rem">'
+                        f'<div style="font-size:1.1rem">🧠</div>'
+                        f'<div>'
+                        f'<div style="font-family:Playfair Display,Georgia,serif;'
+                        f'font-size:.88rem;color:{SCARLET};font-weight:600">'
+                        f'GPT-4o (OpenAI)</div>'
+                        f'<div style="font-size:.6rem;color:{LT_GOLD};opacity:.6;'
+                        f'letter-spacing:.08em">'
+                        f'{result["openai_position"].upper()}</div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True)
+                    parchment(result["openai_argument"])
+
+                ornament()
+
+                # ── Save debate to library ────────────────────────────────────
+                if supabase_db:
+                    sv1, sv2 = st.columns([2, 8])
+                    with sv1:
+                        if st.button("💾  Save Debate", key="save_debate_btn",
+                                     use_container_width=True):
+                            combined = (
+                                f"DEBATE: {result['topic']}\n"
+                                f"PASSAGE: {result['passage']}\n\n"
+                                f"═══ CLAUDE — {result['claude_position']} ═══\n\n"
+                                f"{result['claude_argument']}\n\n"
+                                f"═══ GPT-4o — {result['openai_position']} ═══\n\n"
+                                f"{result['openai_argument']}"
+                            )
+                            ok = save_research(
+                                supabase_db,
+                                result["passage"],
+                                f"DEBATE: {result['topic']}",
+                                combined,
+                                "Debate Session",
+                            )
+                            if ok:
+                                st.success("Debate saved to Research Archive.", icon="✅")
+                                st.session_state.pop("library_data", None)
